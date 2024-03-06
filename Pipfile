@@ -7,6 +7,17 @@ name = "pypi"
 Deprecated = "~=1.2"
 
 [dev-packages]
+build="*"
+pycodestyle = "*"
+twine="*"
 
 [requires]
 python_version = "3"
+
+[scripts]
+clean = "rm -rf dist build src/viur_shop.egg-info"
+#build = "python -m build --wheel"
+build = "python -m build"
+release = "python -m twine upload dist/*"
+release_test = "python -m twine upload --repository testpypi dist/*"
+pep8check = "bash -c \"git diff -U0 | pycodestyle --diff --show-source\""
