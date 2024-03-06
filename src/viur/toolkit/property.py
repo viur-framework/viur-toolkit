@@ -1,5 +1,7 @@
 import datetime
 
+__all__ = ["CachedProperty"]
+
 
 class CachedProperty(object):
     """Wrapper to Cache the result of a function-call"""
@@ -32,6 +34,3 @@ class CachedProperty(object):
         self._value = self.func(*self.args)
         self._lifetimeEnds = datetime.datetime.now() + datetime.timedelta(seconds=self.lifetime)
         return self._value
-
-
-__all__ = ["CachedProperty"]

@@ -1,5 +1,12 @@
 from viur.core import db
 
+__all__ = [
+    "getNewEntityForKey",
+    "normalizeKey",
+    "writeInTransaction",
+    "increaseCounter",
+]
+
 
 def getNewEntityForKey(key):
     return db.Entity(key)
@@ -48,6 +55,3 @@ def increaseCounter(key, name, value=1, start=0):
         return assignedValue
 
     return db.RunInTransaction(txn, normalizeKey(key), name, value, start)
-
-
-__all__ = ["getNewEntityForKey", "normalizeKey", "writeInTransaction", "increaseCounter"]

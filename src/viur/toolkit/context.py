@@ -1,14 +1,18 @@
 import logging
-from viur.core import current, request, session
+import typing as t
 from time import time
 
+from viur.core import current
 
-class LanguageContext(object):
-    def __init__(self, lang):
+__all__ = ["LanguageContext", "TimeMe"]
+
+
+class LanguageContext:
+    def __init__(self, lang: str):
         self.lang = lang
         self.orig_lang = None
 
-    def __enter__(self):
+    def __enter__(self) -> t.Self:
         self.orig_lang = current.language.get()
         # TODO: Session?
         current.language.set(self.lang)
@@ -18,7 +22,7 @@ class LanguageContext(object):
         current.language.set(self.orig_lang)
 
 
-class TimeMe(object):
+class TimeMe:
 
     def __init__(self, name):
         self.name = name
@@ -29,6 +33,3 @@ class TimeMe(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.end = time()
         logging.debug("%s took %.4fs", self.name, self.end - self.start)
-
-
-__all__ = ["LanguageContext", "TimeMe"]

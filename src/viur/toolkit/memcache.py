@@ -1,10 +1,10 @@
 import logging
 
+from viur.core import conf
+
 __all__ = [
     "MemcacheWrapper",
 ]
-
-from viur.core import conf
 
 logger = logging.getLogger(__name__)
 

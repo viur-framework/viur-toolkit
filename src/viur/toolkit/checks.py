@@ -1,6 +1,6 @@
-__all__ = ["contains_substring", "user_has_access"]
-
 from viur.core import conf, current, db
+
+__all__ = ["contains_substring", "user_has_access"]
 
 
 def contains_substring(haystack: str, *needles: str) -> bool:

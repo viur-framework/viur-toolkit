@@ -1,8 +1,8 @@
 from viur.core import current
 
-__all__ = ["change_language", "without_render_preparation"]
-
 from viur.core.skeleton import SkeletonInstance
+
+__all__ = ["change_language", "without_render_preparation"]
 
 
 def change_language(lang: str) -> None:
