@@ -1,3 +1,5 @@
+import logging
+
 from viur.core import db
 
 __all__ = [
@@ -7,6 +9,7 @@ __all__ = [
     "increaseCounter",
 ]
 
+logger = logging.getLogger(__name__)
 
 def getNewEntityForKey(key):
     return db.Entity(key)

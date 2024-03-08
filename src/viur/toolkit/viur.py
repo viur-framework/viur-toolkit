@@ -1,8 +1,15 @@
+import logging
+
 from viur.core import current
+from viur.core.skeleton import SkeletonInstance, skeletonByKind
 
-from viur.core.skeleton import SkeletonInstance
+__all__ = [
+    "change_language",
+    "without_render_preparation",
+    "get_full_skel_from_ref_skel",
+]
 
-__all__ = ["change_language", "without_render_preparation"]
+logger = logging.getLogger(__name__)
 
 
 def change_language(lang: str) -> None:
@@ -17,4 +24,14 @@ def without_render_preparation(skel: SkeletonInstance) -> SkeletonInstance:
         # TODO: ViUR, I DONT WANT TO HAVE RENDERPREPARATION ON MODULE LAYER!!!
         skel = skel.clone()
         skel.renderPreparation = None
+    return skel
+
+
+def get_full_skel_from_ref_skel(ref_skel: SkeletonInstance) -> SkeletonInstance:
+    # logger.debug(f"{ref_skel = }")
+    # logger.debug(f"{ref_skel.skeletonCls = }")
+    kind_name = ref_skel.skeletonCls.__name__.removeprefix("RefSkelFor")
+    # logger.debug(f"{kind_name = }")
+    skel = skeletonByKind(kind_name)()
+    skel.fromDB(ref_skel["key"])
     return skel

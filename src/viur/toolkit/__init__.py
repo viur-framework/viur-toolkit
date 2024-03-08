@@ -1,3 +1,4 @@
+import logging
 import logging as _logging
 
 from .checks import *
@@ -10,5 +11,6 @@ from .report import *
 from .viur import *
 
 # By default, the toolkit log level is INFO
-_logging.getLogger(__name__).setLevel(_logging.INFO)
+if not _logging.getLogger(__name__).level:
+    _logging.getLogger(__name__).setLevel(_logging.INFO)
 del _logging
