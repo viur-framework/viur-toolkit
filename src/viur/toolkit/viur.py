@@ -1,3 +1,7 @@
+"""
+Helper for ViUR-core types and behavior
+"""
+
 import logging
 
 from viur.core import current
