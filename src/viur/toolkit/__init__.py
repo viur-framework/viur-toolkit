@@ -1,4 +1,3 @@
-import logging
 import logging as _logging
 
 from .checks import *
