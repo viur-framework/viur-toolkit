@@ -5,6 +5,7 @@ from .context import *
 from .db import *
 from .decorators import *
 from .memcache import *
+from .numeric import *
 # TODO: needs reimplementation from .property import *
 from .report import *
 from .viur import *
