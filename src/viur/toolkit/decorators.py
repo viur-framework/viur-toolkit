@@ -2,17 +2,35 @@ import functools
 import json
 import logging
 import types
+import typing as t
 
 from viur.core import current, errors, securitykey
 
 __all__ = [
     "asJsonResponse",
     "cache_call_for_request",
+    "debug",
     "parseRequestPayload",
     "skeyRequired",
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def debug(func: t.Callable):
+    """Decorator to print the function signature and return value"""
+
+    @functools.wraps(func)
+    def wrapper_debug(*args, **kwargs):
+        args_repr = list(map(repr, args))
+        kwargs_repr = [f"{k!s}={v!r}" for k, v in kwargs.items()]
+        signature = ", ".join(args_repr + kwargs_repr)
+        logging.info(f"CALLING {func.__name__}({signature})")
+        value = func(*args, **kwargs)
+        logging.info(f"{func.__name__} RETURNED {value}")
+        return value
+
+    return wrapper_debug
 
 
 def skeyRequired(func=None, **decoratorKwArgs):
