@@ -100,10 +100,10 @@ class Report(object):
         io.seek(0)
 
         # noinspection PyTypeChecker
-        return utils.sendEMail(
+        return email.sendEMail(
             dests=receiver,
             # language=Jinja2
-            name="""Subject: Report {{ skel["name"] }}
+            name="""Report {{ skel["name"] }}
 <table>
 	<thead>
 		<tr>
