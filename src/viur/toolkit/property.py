@@ -1,14 +1,26 @@
-import datetime
+import typing as t  # noqa
+from datetime import datetime as dt, timedelta as td, timezone as tz  # noqa
+
+from viur.core import utils
 
 __all__ = ["CachedProperty"]
 
+Seconds: t.TypeAlias = int | float
+Args = t.ParamSpec("Args")
+Value = t.TypeVar("Value")
 
-class CachedProperty(object):
+
+class CachedProperty:
     """Wrapper to Cache the result of a function-call"""
 
-    __slots__ = ("lifetime", "func", "args", "_value", "_lifetimeEnds")
+    __slots__ = ("lifetime", "func", "args", "_value", "_lifetime_ends")
 
-    def __init__(self, lifetime, func, args=None):
+    def __init__(
+        self,
+        lifetime: dt | Seconds,
+        func: t.Callable[Args, Value],
+        args: Args | None = None,
+    ):
         """Initiate a new CachedProperty
 
         :param lifetime: Specifies in seconds how long the cache value should be valid
@@ -20,17 +32,17 @@ class CachedProperty(object):
         if args is not None and not isinstance(args, (tuple, list)):
             raise TypeError("Argument *args* must be a tuple, list or None!")
         super(CachedProperty, self).__init__()
-        self.lifetime = lifetime
+        self.lifetime: td = utils.parse.timedelta(lifetime)
         self.func = func
         self.args = tuple() if args is None else args
         self._value = None
-        self._lifetimeEnds = None
+        self._lifetime_ends = None
 
-    def get(self):
+    def get(self) -> Value:
         """Return the value of Property.
         Might be cached or freshly re-calculated."""
-        if self._value is not None and datetime.datetime.now() < self._lifetimeEnds:
+        if self._value is not None and utils.utcNow() < self._lifetime_ends:
             return self._value
         self._value = self.func(*self.args)
-        self._lifetimeEnds = datetime.datetime.now() + datetime.timedelta(seconds=self.lifetime)
+        self._lifetime_ends = utils.utcNow() + self.lifetime
         return self._value
