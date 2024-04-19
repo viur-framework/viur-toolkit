@@ -3,14 +3,16 @@ Helper for ViUR-core types and behavior
 """
 
 import logging
+import typing as t
 
-from viur.core import current
+from viur.core import current, db
 from viur.core.skeleton import SkeletonInstance, skeletonByKind
 
 __all__ = [
     "change_language",
     "without_render_preparation",
     "get_full_skel_from_ref_skel",
+    "iter_skel",
 ]
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,23 @@ def without_render_preparation(skel: SkeletonInstance) -> SkeletonInstance:
 
 def get_full_skel_from_ref_skel(ref_skel: SkeletonInstance) -> SkeletonInstance:
     kind_name = ref_skel.skeletonCls.__name__.removeprefix("RefSkelFor")
-    skel = skeletonByKind(kind_name)()
+    skel: SkeletonInstance = skeletonByKind(kind_name)() # noqa
     skel.fromDB(ref_skel["key"])
     return skel
+
+
+def iter_skel(query: db.Query) -> t.Iterator[SkeletonInstance]:
+    """Fetch all entries for this query and yield the skel
+
+    Doesn't use fetch() due to the strange ViUR fetch limit (100).
+    Acts as generator to be not memory hungry...
+    """
+    skel: SkeletonInstance = query.srcSkel
+    for entry in query.iter():
+        skel = SkeletonInstance(skel.skeletonCls, clonedBoneMap=skel.boneMap)
+        skel.setEntity(entry)
+        try:
+            yield skel
+        except GeneratorExit:
+            logger.warning("GeneratorExit. Stop iteration.")
+            break
