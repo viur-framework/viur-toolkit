@@ -10,14 +10,14 @@ Args = t.ParamSpec("Args")
 Value = t.TypeVar("Value")
 
 
-class CachedProperty:
+class CachedProperty(t.Generic[Value, Args]):
     """Wrapper to Cache the result of a function-call"""
 
     __slots__ = ("lifetime", "func", "args", "_value", "_lifetime_ends")
 
     def __init__(
         self,
-        lifetime: dt | Seconds,
+        lifetime: td | Seconds,
         func: t.Callable[Args, Value],
         args: Args | None = None,
     ):
