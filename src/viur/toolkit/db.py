@@ -1,4 +1,5 @@
 import logging
+import typing as t
 
 from viur.core import db
 
@@ -10,7 +11,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-_KeyType = str | db.Key
+_KeyType: t.TypeAlias = str | db.Key
 
 
 def normalize_key(key: _KeyType) -> db.Key:

@@ -16,12 +16,15 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+P = t.ParamSpec("P")
+T = t.TypeVar("T")
 
-def debug(func: t.Callable):
+
+def debug(func: t.Callable[P, T]) -> t.Callable[P, T]:
     """Decorator to print the function signature and return value"""
 
     @functools.wraps(func)
-    def wrapper_debug(*args, **kwargs):
+    def wrapper_debug(*args: P.args, **kwargs: P.kwargs) -> t.Callable[P, T]:
         args_repr = list(map(repr, args))
         kwargs_repr = [f"{k!s}={v!r}" for k, v in kwargs.items()]
         signature = ", ".join(args_repr + kwargs_repr)
@@ -176,31 +179,31 @@ def parseRequestPayload(func=None, acceptOnly=None, parseFunc=None):
         return outerWrapper  # @parseRequestPayload() or @parseRequestPayload(**anyKwargs)
 
 
-def cache_call_for_request(func=None):
+def cache_call_for_request(func: t.Callable[P, T] = None) -> t.Callable[P, T]:
     """Cache method calls for the current request
 
     args, kwargs must be hashhable.
     """
 
     # TODO: documentation, merge default kwargs into args
-    def outerWrapper(f):
+    def outer_wrapper(f):
         @functools.wraps(f)
-        def wrapper(*args, **kwargs):
+        def inner_wrapper(*args: P.args, **kwargs: P.kwargs) -> t.Callable[P, T]:
             cache_key = tuple([func.__name__] + list(args) + list(sorted(kwargs.items())))
             cache = current.request_data.get().setdefault("_call_cache", {})
 
             try:
                 res = cache[cache_key]
-                logger.debug("Loaded %r from cache (req cache hit)", cache_key)
+                logger.debug(f"Loaded {cache_key} from cache (req cache hit)")
                 return res
             except KeyError:
                 res = cache[cache_key] = f(*args, **kwargs)
-                logger.debug("Stored %r in cache (req cache miss)", cache_key)
+                logger.debug(f"Stored {cache_key} in cache (req cache miss)")
                 return res
 
-        return wrapper
+        return inner_wrapper
 
     if isinstance(func, (types.MethodType, types.FunctionType)):
-        return outerWrapper(func)  # @cache_call_for_request
+        return outer_wrapper(func)  # @cache_call_for_request
     else:
-        return outerWrapper  # @cache_call_for_request() or @cache_call_for_request(**anyKwargs)
+        return outer_wrapper  # @cache_call_for_request() or @cache_call_for_request(**anyKwargs)
