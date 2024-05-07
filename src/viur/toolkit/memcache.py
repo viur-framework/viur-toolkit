@@ -1,8 +1,13 @@
 import logging
+import pickle
 import typing as t  # noqa
+from collections import namedtuple
 from datetime import datetime as dt, timedelta as td, timezone as tz  # noqa
 
+from google.appengine.api.memcache import Client
+from google.appengine.ext.testbed import Testbed
 from viur.core import conf, utils
+
 
 __all__ = [
     "MemcacheWrapper",
@@ -14,29 +19,44 @@ Seconds: t.TypeAlias = int | float
 Args = t.ParamSpec("Args")
 Value = t.TypeVar("Value")
 
-
 # FIXME: re-implement
 
-class MemcacheDummy:
+if conf.instance.is_dev_server:
+    # On the local dev_appserver, we use Google's memcache stub,
+    # originally designed for test cases, as a local emulator.
+    logger.debug("Using memcache stub")
+    testbed = Testbed()
+    testbed.activate()
+    testbed.init_memcache_stub()
 
+memcache = Client()
+
+MemcacheElement = namedtuple("MemcacheElement", ("data", "expires"))
+
+
+class MemcacheDummy:
     def __init__(self):
         super().__init__()
         self.data = {}
 
     def get(self, name, namespace="default", *args, **kwargs):
         # logger.debug(f"memcache: {self.data = }")
-        return self.data.setdefault(namespace, {}).get(name)
+        if (res := self.data.setdefault(namespace, {}).get(name)) and utils.utcNow() <= res.expires:
+            return pickle.loads(res.data)
+        return None
 
     def set(self, name, value, cachetime, namespace="default", *args, **kwargs):
-        # TODO: consider cachetime
-        self.data.setdefault(namespace, {})[name] = value
+        cachetime = utils.parse.timedelta(cachetime)
+        expires = utils.utcNow() + cachetime
+        value = pickle.dumps(value)
+        self.data.setdefault(namespace, {})[name] = MemcacheElement(value, expires)
         # logger.debug(f"memcache: {self.data = }")
 
     def delete(self, name, namespace="default", *args, **kwargs):
         return self.data.setdefault(namespace, {}).pop(name, None)
 
 
-memcache = MemcacheDummy()
+# memcache = MemcacheDummy()
 
 
 class MemcacheWrapper(t.Generic[Value, Args]):
@@ -55,7 +75,7 @@ class MemcacheWrapper(t.Generic[Value, Args]):
         name: str = None,
         args: Args.args = tuple(),
         cachetime: td | Seconds = td(hours=1),
-        namespace=None,
+        namespace: str=None,
     ):
         """Initialize a new MemcacheWrapper instance.
 
@@ -89,7 +109,7 @@ class MemcacheWrapper(t.Generic[Value, Args]):
     def set(self) -> Value:
         """Set the value (force a recalculation) in the memcache"""
         res = self.func(*self.args)
-        memcache.set(self.name, res, self.cachetime, namespace=self.namespace)
+        memcache.set(self.name, res, self.cachetime.total_seconds(), namespace=self.namespace)
         return res
 
     def clear(self) -> t.Any:
