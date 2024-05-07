@@ -1,12 +1,18 @@
 import logging
+import typing as t  # noqa
+from datetime import datetime as dt, timedelta as td, timezone as tz  # noqa
 
-from viur.core import conf
+from viur.core import conf, utils
 
 __all__ = [
     "MemcacheWrapper",
 ]
 
 logger = logging.getLogger(__name__)
+
+Seconds: t.TypeAlias = int | float
+Args = t.ParamSpec("Args")
+Value = t.TypeVar("Value")
 
 
 # FIXME: re-implement
@@ -33,7 +39,7 @@ class MemcacheDummy:
 memcache = MemcacheDummy()
 
 
-class MemcacheWrapper(object):
+class MemcacheWrapper(t.Generic[Value, Args]):
     """Wrapper to store computed values in memcache.
 
     A value will be recalculated after the cachetime has expired
@@ -42,24 +48,34 @@ class MemcacheWrapper(object):
 
     __slots__ = ("name", "func", "args", "cachetime", "namespace")
 
-    def __init__(self, name, func, args=tuple(), cachetime=3600, namespace=None):
+    def __init__(
+        self,
+        func: t.Callable[Args, Value],
+        *,
+        name: str = None,
+        args: Args.args = tuple(),
+        cachetime: td | Seconds = td(hours=1),
+        namespace=None,
+    ):
         """Initialize a new MemcacheWrapper instance.
 
-        :param name: The name under which the value is to be stored in the memcache.
         :param func: The function to calculate the value.
+        :param name: The name under which the value is to be stored in the memcache.
         :param args: Arguments for the function, must be static
         :param cachetime: Optional expiration time in seconds.
         :param namespace: The namespace in the memcache.
         """
-        self.name = "/".join([name] + list(map(repr, args)))
-        self.func = func
-        self.args = args
-        self.cachetime = cachetime
+        if name is None:
+            name = func.__qualname__
+        self.name: str = "/".join([name] + list(map(repr, args)))
+        self.func: t.Callable[Args, Value] = func
+        self.args: Args.args = args
+        self.cachetime: td = utils.parse.timedelta(cachetime)
         if namespace is None:
-            namespace = "sh_cache_%s" % conf.instance.app_version.split(".")[0]
-        self.namespace = namespace
+            namespace = f"cache_{conf.instance.app_version}"
+        self.namespace: str = namespace
 
-    def get(self):
+    def get(self) -> Value:
         """Get the value from memcache
 
         Trigger the recalculation if necessary.
@@ -70,17 +86,17 @@ class MemcacheWrapper(object):
             res = self.set()
         return res
 
-    def set(self):
+    def set(self) -> Value:
         """Set the value (force a recalculation) in the memcache"""
         res = self.func(*self.args)
         memcache.set(self.name, res, self.cachetime, namespace=self.namespace)
         return res
 
-    def clear(self):
+    def clear(self) -> t.Any:
         """Drop the stored value in memcache"""
         return memcache.delete(self.name, namespace=self.namespace)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<%s.%s object, name=%r, namespace=%r, func=%r, args=%r, cachetime=%r>" % (
             self.__class__.__module__, self.__class__.__name__,
             self.name, self.namespace, self.func, self.args, self.cachetime,
