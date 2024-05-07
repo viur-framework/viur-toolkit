@@ -1,7 +1,7 @@
 import logging
 import typing as t
 
-from viur.core import db
+from viur.core import db, skeleton, bones
 
 __all__ = [
     "normalize_key",
@@ -56,3 +56,96 @@ def increase_counter(key: _KeyType, name: str, value: float | int = 1, start: fl
         return old_value
 
     return db.RunInTransaction(txn, normalize_key(key), name, value, start)
+
+
+def set_status(
+    key: _KeyType,
+    values: t.Dict = None,
+    check: t.Dict = None,
+    create: [t.Dict, bool] = None,
+    func: callable = None,
+    skel: skeleton.SkeletonInstance = None,
+    update_relations: bool = False
+):
+    """
+    Universal function to set a status of an entity within a transaction.
+
+    :param key: Entity key to change
+    :param values: A dict of key-values to update on the entry
+    :param check: An optional dict of key-values to check on the entry before
+    :param create: When key does not exist, create it, optionally with values from provided dict.
+    :param func: A function that is called inside the transaction
+    :param skel: Use assigned skeleton instead of low-level DB-API
+    :param update_relations: Trigger update relations task on success (only in skel-mode, defaults to False)
+
+    If the function does not raise an Exception, all went well.
+    It returns either the assigned skel, or the db.Entity on success.
+    """
+    if callable(values):
+        assert not func, "'values' is a callable, but func is also set. Either set values or func in this case."
+        func = values
+        values = None
+
+    assert isinstance(values, dict) or values is None, "'values' has to be a dict when set"
+
+    def transaction():
+        exists = True
+
+        if skel:
+            if not skel.fromDB(key):
+                if not create:
+                    raise ValueError(f"Entity {key=} not found")
+
+                skel["key"] = key
+                exists = False
+
+            obj = skel
+        else:
+            obj = db.Get(key)
+
+            if obj is None:
+                if not create:
+                    raise ValueError(f"Entity {key=} not found")
+
+                obj = db.Entity(key)
+                exists = False
+
+        if not exists and isinstance(create, dict):
+            for bone, value in create.items():
+                obj[bone] = value
+
+        if check:
+            assert isinstance(check, dict), "'check' has to be a dict, you diggi!"
+
+            for bone, value in check.items():
+                assert obj[bone] == value, "%r contains %r, expecting %r" % (bone, obj[bone], value)
+
+        if values:
+            for bone, value in values.items():
+                # Increment by value?
+                if bone[0] == "+":
+                    obj[bone[1:]] += value
+                # Decrement by value?
+                elif bone[0] == "-":
+                    obj[bone[1:]] -= value
+                else:
+                    if skel and (
+                        (boneinst := getattr(skel, bone, None))
+                        and isinstance(boneinst, bones.RelationalBone)
+                    ):
+                        assert skel.setBoneValue(bone, value)
+                        continue
+
+                    obj[bone] = value
+
+        if func and callable(func):
+            func(obj)
+
+        if skel:
+            assert skel.toDB(update_relations=update_relations)
+        else:
+            db.Put(obj)
+
+        return obj
+
+    return db.RunInTransaction(transaction)
