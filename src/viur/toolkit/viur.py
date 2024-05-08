@@ -10,6 +10,7 @@ from viur.core.skeleton import SkeletonInstance, skeletonByKind
 
 __all__ = [
     "change_language",
+    "get_task_retry_count",
     "without_render_preparation",
     "get_full_skel_from_ref_skel",
     "iter_skel",
@@ -24,6 +25,15 @@ def change_language(lang: str) -> None:
     current.language.set(lang)
 
 
+def get_task_retry_count() -> int:
+    """Return the number of times the current task is retried as int"""
+    try:
+        return int(current.request.get().request.headers.get("X-Appengine-Taskretrycount", -1))
+    except AttributeError:
+        # During warmup current.request is None (at least on local devserver)
+        return -1
+
+
 def without_render_preparation(skel: SkeletonInstance) -> SkeletonInstance:
     """Remove clones skel without render preparation if was set else the skel as is"""
     if skel.renderPreparation is not None:
@@ -35,7 +45,7 @@ def without_render_preparation(skel: SkeletonInstance) -> SkeletonInstance:
 
 def get_full_skel_from_ref_skel(ref_skel: SkeletonInstance) -> SkeletonInstance:
     kind_name = ref_skel.skeletonCls.__name__.removeprefix("RefSkelFor")
-    skel: SkeletonInstance = skeletonByKind(kind_name)() # noqa
+    skel: SkeletonInstance = skeletonByKind(kind_name)()  # noqa
     skel.fromDB(ref_skel["key"])
     return skel
 
