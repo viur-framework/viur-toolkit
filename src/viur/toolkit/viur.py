@@ -60,6 +60,7 @@ def iter_skel(query: db.Query) -> t.Iterator[SkeletonInstance]:
     for entry in query.iter():
         skel = SkeletonInstance(skel.skeletonCls, clonedBoneMap=skel.boneMap)
         skel.setEntity(entry)
+        db.currentDbAccessLog.get(set()).add(skel["key"])
         try:
             yield skel
         except GeneratorExit:
