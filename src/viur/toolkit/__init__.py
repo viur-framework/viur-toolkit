@@ -4,10 +4,11 @@ from .checks import *
 from .context import *
 from .db import *
 from .decorators import *
+# TODO: needs reimplementation from .report import *
+from .helpers import *
 from .memcache import *
 from .numeric import *
 from .property import *
-# TODO: needs reimplementation from .report import *
 from .viur import *
 
 # By default, the toolkit log level is INFO
