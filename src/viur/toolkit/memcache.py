@@ -8,7 +8,6 @@ from google.appengine.api.memcache import Client
 from google.appengine.ext.testbed import Testbed
 from viur.core import conf, utils
 
-
 __all__ = [
     "MemcacheWrapper",
 ]
@@ -45,9 +44,9 @@ class MemcacheDummy:
             return pickle.loads(res.data)
         return None
 
-    def set(self, name, value, cachetime, namespace="default", *args, **kwargs):
-        cachetime = utils.parse.timedelta(cachetime)
-        expires = utils.utcNow() + cachetime
+    def set(self, name, value, time=td(days=30), namespace="default", *args, **kwargs):
+        time = utils.parse.timedelta(time)
+        expires = utils.utcNow() + time
         value = pickle.dumps(value)
         self.data.setdefault(namespace, {})[name] = MemcacheElement(value, expires)
         # logger.debug(f"memcache: {self.data = }")
@@ -75,7 +74,7 @@ class MemcacheWrapper(t.Generic[Value, Args]):
         name: str = None,
         args: Args.args = tuple(),
         cachetime: td | Seconds = td(hours=1),
-        namespace: str=None,
+        namespace: str = None,
     ):
         """Initialize a new MemcacheWrapper instance.
 
