@@ -1,9 +1,11 @@
 import functools
+import operator
 
 import typing as t
 
 __all__ = [
     "vars_full",
+    "freeze_dict",
 ]
 
 
@@ -32,3 +34,14 @@ def vars_full(
         if isinstance(value, (property, functools.cached_property)):
             res[attr] = getattr(obj, attr)
     return res
+
+
+def freeze_dict(value: dict[str, t.Any]) -> list:
+    """Sort a dict recursively by keys and return as list"""
+    return sorted(
+        [
+            (pair[0], freeze_dict(pair[1])) if isinstance(pair[1], dict) else pair
+            for pair in value.items()
+        ],
+        key=operator.itemgetter(0),
+    )
