@@ -8,7 +8,6 @@ from viur.core.bones.file import ensureDerived
 from viur.core.skeleton import BaseSkeleton, SkeletonInstance, listKnownSkeletons, skeletonByKind
 from viur.core.tasks import CallableTask, CallableTaskBase, QueryIter
 from .checks import user_has_access
-from .decorators import debug
 
 __all__ = [
     "BuildDerivationsDispatcher",
@@ -46,7 +45,7 @@ class BuildDerivationsDispatcher(CallableTaskBase):
     def execute(self, module: str) -> None:
         usr = current.user.get()
         if not usr:
-            logging.warning("Don't know who to inform after rebuilding finished")
+            logger.warning("Don't know who to inform after rebuilding finished")
             notify = None
         else:
             notify = usr["name"]
@@ -56,14 +55,14 @@ class BuildDerivationsDispatcher(CallableTaskBase):
         else:
             modules = [module]
         for module in modules:
-            logging.info(f"Rebuilding search index for {module=}")
+            logger.info(f"Rebuilding search index for {module=}")
             self._run(module, notify)
 
     @staticmethod
     def _run(module: str, notify: str) -> None:
         skel_cls = skeletonByKind(module)
         if not skel_cls:
-            logging.error(f"{BuildDerivationsDispatcher.__name__}: Invalid {module=}")
+            logger.error(f"{BuildDerivationsDispatcher.__name__}: Invalid {module=}")
             return
         BuildDerivations.startIterOnQuery(skel_cls().all(), {"notify": notify, "module": module})
 
@@ -76,11 +75,9 @@ class BuildDerivations(QueryIter):
         for bone_name, bone_instance in skel.items():
             if not isinstance(bone_instance, FileBone):
                 continue
-            logger.debug(f"{bone_instance = }")
             cls._bone_ensure_derived(skel, bone_instance, bone_name)
 
     @classmethod
-    @debug
     def _bone_ensure_derived(cls, skel: SkeletonInstance, bone_instance: FileBone, bone_name: str) -> None:
         """Logic from FileBone.postSavedHandler"""
 
@@ -111,4 +108,4 @@ class BuildDerivations(QueryIter):
         try:
             email.sendEMail(dests=custom_data["notify"], stringTemplate=txt, skel=None)
         except Exception as exc:  # noqa; OverQuota, whatever
-            logging.exception(f'Failed to notify {custom_data["notify"]}')
+            logger.exception(f'Failed to notify {custom_data["notify"]}')
