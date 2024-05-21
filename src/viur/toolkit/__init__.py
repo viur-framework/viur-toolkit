@@ -1,5 +1,6 @@
 import logging as _logging
 
+from .callable_tasks import *
 from .checks import *
 from .context import *
 from .db import *
