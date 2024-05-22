@@ -60,19 +60,19 @@ def increase_counter(key: _KeyType, name: str, value: float | int = 1, start: fl
 
 def set_status(
     key: _KeyType,
-    values: t.Dict = None,
-    check: t.Dict = None,
-    create: [t.Dict, bool] = None,
-    func: callable = None,
+    values: dict = None,
+    check: dict = None,
+    create: dict[str, t.Any] | bool = None,
+    func: t.Callable[[skeleton.SkeletonInstance | db.Entity], None] = None,
     skel: skeleton.SkeletonInstance = None,
-    update_relations: bool = False
-):
+    update_relations: bool = False,
+) -> skeleton.SkeletonInstance | db.Entity:
     """
     Universal function to set a status of an entity within a transaction.
 
     :param key: Entity key to change
     :param values: A dict of key-values to update on the entry
-    :param check: An optional dict of key-values to check on the entry before
+    :param precondition_check: An optional dict of key-values to check on the entry before
     :param create: When key does not exist, create it, optionally with values from provided dict.
     :param func: A function that is called inside the transaction
     :param skel: Use assigned skeleton instead of low-level DB-API
