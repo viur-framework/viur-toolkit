@@ -1,6 +1,6 @@
 import logging
+import time
 import typing as t
-
 from viur.core import db, skeleton, bones
 
 __all__ = [
@@ -66,9 +66,11 @@ def set_status(
     create: dict[str, t.Any] | t.Callable[[skeleton.SkeletonInstance | db.Entity], None] | bool = False,
     skel: skeleton.SkeletonInstance = None,
     update_relations: bool = False,
+    retry: int = 1,
 ) -> skeleton.SkeletonInstance | db.Entity:
     """
-    Universal function to set a status of an entity within a transaction.
+    Universal function to set values of an entity within a transaction.
+    It is mostly used for status changes, but can also change any value.
 
     :param key: Entity key to change
     :param values: A dict of key-values to update on the entry, or a callable that is executed within the transaction
@@ -76,10 +78,13 @@ def set_status(
     :param create: When key does not exist, create it, optionally with values from provided dict, or in a callable.
     :param skel: Use assigned skeleton instead of low-level DB-API
     :param update_relations: Trigger update relations task on success (only in skel-mode, defaults to False)
+    :param retry: On ViurDatastoreError, retry for this amount of times.
 
     If the function does not raise an Exception, all went well.
     It returns either the assigned skel, or the db.Entity on success.
     """
+
+    # Transactional function
     def transaction():
         exists = True
 
@@ -142,7 +147,7 @@ def set_status(
             values(obj)
 
         else:
-            raise ValueError("'values' must eiher be a dict or callable.")
+            raise ValueError("'values' must either be dict or callable.")
 
         if skel:
             assert skel.toDB(update_relations=update_relations)
@@ -151,4 +156,16 @@ def set_status(
 
         return obj
 
-    return db.RunInTransaction(transaction)
+    # Retry loop
+    while True:
+        try:
+            return db.RunInTransaction(transaction)
+
+        except db.ViurDatastoreError as e:
+            retry -= 1
+            if retry <= 0:
+                raise
+
+            logging.debug(f"{e}, retrying {retry} more times")
+
+        time.sleep(1)
