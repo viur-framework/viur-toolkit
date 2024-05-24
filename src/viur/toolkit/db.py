@@ -119,7 +119,8 @@ def set_status(
         # Handle precondition
         if isinstance(precondition, dict):
             for bone, value in precondition.items():
-                assert obj[bone] == value, f"{bone} contains {obj[bone]!r}, expecting {value!r}"
+                if obj[bone] != value:
+                    raise ValueError(f"{bone} contains {obj[bone]!r}, expecting {value!r}")
 
         elif callable(precondition):
             precondition(obj)
