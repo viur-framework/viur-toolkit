@@ -1,8 +1,7 @@
 """
-Importer module.
-
-This module is a library used by the Importable prototype.
+Importer module, Importable prototype and some helpers.
 """
+import base64
 import html
 import json
 import logging
@@ -11,32 +10,30 @@ import numbers
 import re
 import requests
 import typing as t
-from viur.core import bones, conf, db
+from google.cloud.datastore import _app_engine_key_pb2
+from viur.core import bones, conf, current, db, email, errors, utils
+from viur.core.decorators import exposed
 from viur.core.skeleton import SkeletonInstance
+from viur.core.tasks import CallDeferred
 
 logger = logging.getLogger(__name__)
 
 
 class Importer(requests.Session):
-    def __init__(self, portal, render="vi", creds=None, cookies=None):
-        super(Importer, self).__init__()
-        from .abstracts.importable import Importable
 
-        if not (Importable.get_interface_config() and Importable.get_interface_config().get("import")):
-            raise IOError("No import interfaces defined in configuration")
+    def __init__(self, url, creds, render="vi", cookies=None):
+        super().__init__()
 
-        cfg = Importable.get_interface_config()["import"].get(portal)
-        if cfg is None:
-            raise IOError("Importer %r is disabled by configuration" % portal)
+        if not url:
+            raise IOError(f"Importer disabled by configuration")
 
-        assert "type" in cfg, "Configuration for '%r' is incomplete" % portal
-        if cfg["type"] == "viur":
-            assert all([x in cfg for x in ["auth", "host"]]), "Configuration for '%r' is incomplete" % portal
+        assert "type" in creds, f"Configuration for {url=} is incomplete"
+        if creds["type"] == "viur":
+            assert all([x in creds for x in ["auth", "host"]]), f"Configuration for {url=} is incomplete"
 
+        self.host = url
         self.render = render
-        self.portal = portal
-        self.method = cfg.get("auth")
-        self.host = cfg.get("host", "http://localhost")
+        self.method = creds.get("auth")
         self.secretname = self.user = self.password = self.key = self.otp = None
 
         if cookies:
@@ -44,37 +41,33 @@ class Importer(requests.Session):
             self.cookies.update(cookies)
             return
 
-        if creds:
-            # allow to extend configuration credentials by caller (e.g. to extend credentials asked for)
-            cfg |= {k: v for k, v in creds.items() if k in ("user", "pass", "secretkey", "otp")}
-
         if self.method == "userpassword":
-            self.user = cfg["user"]
-            self.password = cfg["pass"]
+            self.user = creds["user"]
+            self.password = creds["pass"]
         elif self.method == "userpassword+otp":
-            self.user = cfg["user"]
-            self.password = cfg["pass"]
-            self.otp = cfg["otp"]
+            self.user = creds["user"]
+            self.password = creds["pass"]
+            self.otp = creds["otp"]
         elif self.method in ["secretkey", "loginkey"]:
-            self.secretname = cfg.get("keyname", "secret")
+            self.secretname = creds.get("keyname", "secret")
 
-            if module := cfg.get("from"):
-                if "." in module:
-                    module, key = module.split(".", 1)
-                else:
-                    key = portal
+            if module := creds.get("from"):
+                assert "." in module
+                module, key = module.split(".", 1)
+
                 mod = getattr(conf.main_app.vi, module)  # fixme: viur-core 3.7 Remove vi when possibel!
                 mod = db.Get(db.Key(mod.viewSkel().kindName, mod.getKey()))
                 self.key = mod[key]
             else:
-                self.key = cfg.get("key")
+                self.key = creds.get("key")
 
             assert self.key, "No key defined?"
+
         elif self.method is not None:
-            raise ValueError("Unsupported authmethod configuration %r" % self.method)
+            raise ValueError(f"Unsupported authmethod configuration {self.method!r}")
 
         if self.method and not self.login():
-            raise IOError("Unable to logon to '%s'" % self.host)
+            raise IOError(f"Unable to logon to '{self.host}'")
 
     def logout(self):
         if self.method != "secretkey":
@@ -93,9 +86,9 @@ class Importer(requests.Session):
 
             kwargs["data"][self.secretname] = self.key
         else:
-            logger.debug("GET  %s %s" % ("/".join([self.host, self.render, url]), kwargs))
+            logger.debug(f"GET  {'/'.join([self.host, self.render, url])} {kwargs}")
 
-        return super(Importer, self).get("/".join([self.host, self.render, url]), *args, **kwargs)
+        return super().get("/".join([self.host, self.render, url]), *args, **kwargs)
 
     def post(self, url, *args, **kwargs):
         if url.startswith("/"):
@@ -107,13 +100,13 @@ class Importer(requests.Session):
 
             kwargs["data"][self.secretname] = self.key
         else:
-            logger.debug("POST %s %s" % ("/".join([self.host, self.render, url]), kwargs))
+            logger.debug(f"POST {'/'.join([self.host, self.render, url])} {kwargs}")
 
-        return super(Importer, self).post("/".join([self.host, self.render, url]), *args, **kwargs)
+        return super().post("/".join([self.host, self.render, url]), *args, **kwargs)
 
     def login(self):
         if self.method == "secretkey":
-            logger.debug("%r requires no login", self.method)
+            logger.debug(f"{self.method=} requires no login")
         else:
             if self.method in ("userpassword", "userpassword+otp"):
                 answ = self.post("/user/auth_userpassword/login",
@@ -150,23 +143,23 @@ class Importer(requests.Session):
                 logger.error(f"Unable to logon to {self.host!r}, got {answ=} with {answ.text=}")
                 return False
 
-        logger.debug(f"HELLO {self.portal} at {self.host}")
+        logger.debug(f"HELLO {self.url}")
         return True
 
     def list(self, module, *args, **kwargs):
-        req = self.get("/%s/list" % module, params=kwargs, timeout=60)
+        req = self.get(f"/{module}/list", params=kwargs, timeout=60)
 
         if not req.status_code == 200:
-            logger.error("Error %d, unable to fetch items" % req.status_code)
+            logger.error(f"Error {req.status_code!r}, unable to fetch items")
             return None
 
         return req.json()
 
     def flatlist(self, module, *args, **kwargs):
-        req = self.get("/%s/listentries" % module, params=kwargs, timeout=60)
+        req = self.get(f"/{module}/listentries", params=kwargs, timeout=60)
 
         if not req.status_code == 200:
-            logger.error("Error %d, unable to fetch items" % req.status_code)
+            logger.error(f"Error {req.status_code!r}, unable to fetch items")
             return None
 
         return req.json()
@@ -187,10 +180,10 @@ class Importer(requests.Session):
         return ret
 
     def view(self, module, key):
-        req = self.get("/%s/view/%s" % (module, key), timeout=10)
+        req = self.get(f"/{module}/view/{key}", timeout=10)
 
         if not req.status_code == 200:
-            logger.error("Error %d, unable to fetch entry" % req.status_code)
+            logger.error(f"Error {req.status_code!r}, unable to fetch entry")
             return None
 
         return req.json()
@@ -202,13 +195,15 @@ class Importer(requests.Session):
         dlkey = info["dlkey"]
         servingurl = info.get("servingurl")
         size = info["size"]
+
         if not isinstance(size, int):
             try:
                 size = int(size)
-            except:
-                logger.error("cannot convert %r to int", size)
+            except ValueError:
+                logger.error("cannot convert {size!r} to int", size)
                 return None
-        if size > 200000000:
+
+        if size > 200_000_000:
             logger.error("Download skipped, because its larger than 200mb")
             logger.error(info)
             return None
@@ -218,23 +213,23 @@ class Importer(requests.Session):
 
         if "downloadUrl" in info:
             # ViUR 3
-            logger.debug("Downloading %s" % (self.host + info["downloadUrl"]))
+            logger.debug(f"Downloading {self.host + info['downloadUrl']}")
             res = self.get(info["downloadUrl"], timeout=60)
         else:
             # ViUR 2
-            logger.debug("Downloading %s" % (self.host + "/file/download/" + dlkey))
+            logger.debug(f"Downloading {self.host + '/file/download/' + dlkey}")
             res = self.get("/file/download/" + dlkey, timeout=60)
         if not res.ok:
             if servingurl:
-                logger.warning("Download failed, trying to fetch using servingurl %r", servingurl)
-                content = super(Importer, self).get(servingurl).content
+                logger.warning(f"Download failed, trying to fetch using {servingurl=}")
+                content = super().get(servingurl).content
             else:
-                logger.error("Download failed, %r", res.status_code)
+                logger.error(f"Download failed with {res.status_code=}")
                 return None
         else:
             content = res.content
 
-        logger.debug("%r has %d bytes", name, len(content))
+        logger.debug(f"{name=} has {len(content)!r} bytes")
 
         key = conf.main_app.file.write(name, content, mimetype)
 
@@ -262,7 +257,7 @@ class Importer(requests.Session):
             knownFiles = {}
 
             if debug:
-                logger.debug(f"{boneValue = }")
+                logger.debug(f"{boneValue=}")
 
             if boneValue:
                 if bone.languages and isinstance(value, dict):
@@ -290,7 +285,7 @@ class Importer(requests.Session):
             # knownFiles.clear() #Temporary enabled to clear all files
 
             if debug:
-                logger.debug("%s knownFiles = %r", boneName, knownFiles)
+                logger.debug(f"{boneName} knownFiles = {knownFiles!r}")
 
             def handle_entries(changes, value, lang=None):
                 for entry in value:
@@ -299,13 +294,14 @@ class Importer(requests.Session):
                         continue
 
                     if debug:
-                        logger.debug(f"{entry = } // {lang = }")
+                        logger.debug(f"{entry=} // {lang=}")
+
                     fileName = entry["dest"]["name"]
                     key = None
 
                     if fileName not in knownFiles:
                         if debug:
-                            logger.debug("%s name %s is not known", boneName, fileName)
+                            logger.debug(f"{boneName} name {fileName=} is not known")
 
                         key = self.importFile(entry["dest"])
                         if not key:
@@ -470,9 +466,7 @@ class Importer(requests.Session):
                 boneValue = {}
 
             if debug:
-                logger.debug(f"{boneValue = }")
-                logger.debug(f"{value = }")
-                logger.debug(f"{bone = }")
+                logger.debug(f"{boneValue=} {value=} {bone=}")
 
             for lang, val in value.items():
                 if lang in bone.languages:
@@ -512,9 +506,8 @@ class Importer(requests.Session):
 
             if debug:
                 logger.debug(
-                    "%s old:%r != new:%r? %r",
-                    boneName, new_value_as_str, old_value_as_str,
-                    new_value_as_str != old_value_as_str
+                    f"{boneName} old={old_value_as_str!r} != new:{new_value_as_str!r}? "
+                    f"{new_value_as_str != old_value_as_str!r}"
                 )
 
             if new_value_as_str != old_value_as_str:
@@ -525,7 +518,7 @@ class Importer(requests.Session):
                 changes += 1
 
                 if debug:
-                    logger.debug("%s new value %r", boneName, skel[boneName])
+                    logger.debug(f"{boneName} new value {skel[boneName]=}")
 
                 '''
                 # Turn value into a list to avoid implementing below code twice
@@ -557,7 +550,7 @@ class Importer(requests.Session):
 
         for bone, tr in translate.items():
             if debug:
-                logger.debug("bone = %r, tr = %r, val = %r", bone, tr, values.get(bone))
+                logger.debug(f"{bone=}, {tr=}, {values.get(bone)=}")
 
             if bone.endswith("*"):
                 for k, v in values.items():
@@ -580,7 +573,7 @@ class Importer(requests.Session):
                                 if not v:
                                     if skel[lookfor]:
                                         if debug:
-                                            logger.debug("%s changed from %r to %r", lookfor, old, v)
+                                            logger.debug(f"{lookfor!r} changed from {old!r} to {v!r}")
 
                                         changes += 1
 
@@ -588,7 +581,7 @@ class Importer(requests.Session):
 
                                 elif ch := self.setSkelValue(skel, lookfor, v, debug=debug):
                                     if debug:
-                                        logger.debug("%s changed from %r to %r", lookfor, old, skel[lookfor])
+                                        logger.debug(f"{lookfor!r} changed from {old!r} to {skel[lookfor]!r}")
 
                                     changes += ch
 
@@ -612,7 +605,7 @@ class Importer(requests.Session):
                         if not values[bone]:
                             if skel[tr]:
                                 if debug:
-                                    logger.debug("%s changed from %r to %r", tr, old, values[bone])
+                                    logger.debug(f"{tr!r} changed from {old!r} to {values[bone]!r}")
 
                                 changes += 1
                             bone_instance = getattr(skel, tr)
@@ -622,18 +615,18 @@ class Importer(requests.Session):
                                 skel[tr] = bone_instance.getDefaultValue(skel)
                         else:
                             if debug:
-                                logger.debug("setting %r to %r", tr, values[bone])
+                                logger.debug(f"setting {tr!r} to {values[bone]!r}")
 
                             try:
                                 if ch := self.setSkelValue(skel, tr, values[bone], debug=debug):
                                     if debug:
-                                        logger.debug("%s changed from %r to %r", tr, old, skel[tr])
+                                        logger.debug(f"{tr!r} changed from {old!r} to {skel[tr]!r}")
 
                                     changes += ch
 
                             except:  # db.Error:
                                 raise
-                                logger.warning("Unable to set value for '%s'", tr)
+                                logger.warning(f"Unable to set value for {tr=!r}")
 
                 elif callable(tr):
                     changes += tr(
@@ -652,7 +645,7 @@ class Importer(requests.Session):
     def toSkel(self, skel: SkeletonInstance, values, translate={}, reset=None, sourceKey="key", update=True,
                enforce=False, debug: bool = False):
         # assert isinstance(skel, skeleton.BaseSkeleton), "'skel' must be a BaseSkeleton instance"
-        assert sourceKey in values, "'%s' not in values" % sourceKey
+        assert sourceKey in values, f"'{sourceKey}' not in values"
 
         changes = 0
         exists = True
@@ -671,13 +664,13 @@ class Importer(requests.Session):
 
         if not enforce and success:
             if not update:
-                logger.debug("%s entity with key '%s' exists, but no update wanted", skel.kindName, key)
+                logger.debug(f"{skel.kindName} entity with {key=} exists, but no update wanted")
                 return changes
         else:
             if enforce:
-                logger.debug("Creation of %s entity with key '%s' will be enforced.", skel.kindName, key)
+                logger.debug(f"Creation of {skel.kindName} entity with {key=} will be enforced.")
             else:
-                logger.debug("%s entity with key '%s' does not not exist", skel.kindName, key)
+                logger.debug(f"{skel.kindName} entity with {key=} does not not exist")
                 exists = False
 
             skel["key"] = key
@@ -695,15 +688,746 @@ class Importer(requests.Session):
         changes += self.translate(skel, values, translate, debug=debug)
 
         if changes:
-            logger.debug("%s %r detected %d changes", skel.kindName, key, changes)
+            logger.debug(f"{skel.kindName} {key=} detected {changes=}")
 
         if debug:
             logger.debug("--- toSkel ---")
 
             for bone in skel.keys():
                 logger.debug(
-                    "%r (multiple=%r, languages=%r) => %r",
-                    bone, getattr(skel, bone).multiple, getattr(skel, bone).languages, skel[bone]
+                    f"{bone=} (multiple={getattr(skel, bone).multiple}, languages={getattr(skel, bone).languages}) => {skel[bone]!r}",
                 )
 
         return changes if exists else -1
+
+
+class _AppKey(db.Key):
+    def to_legacy_urlsafe(self, project_id=None) -> str:
+        """
+        Converts this key into the (urlsafe) protobuf string representation.
+        :return: The urlsafe string representation of this key
+        """
+        currentKey = self
+        pathElements = []
+        while currentKey:
+            pathElements.insert(
+                0,
+                _app_engine_key_pb2.Path.Element(
+                    type=currentKey.kind,
+                    id=currentKey.id,
+                    name=currentKey.name,
+                ),
+            )
+            currentKey = self.parent
+
+        if not project_id:
+            project_id = conf.project_id
+
+        reference = _app_engine_key_pb2.Reference(
+            app=project_id,
+            path=_app_engine_key_pb2.Path(element=pathElements),
+        )
+        raw_bytes = reference.SerializeToString()
+        return base64.urlsafe_b64encode(raw_bytes).strip(b"=")
+
+
+class Importable:
+    """
+    Importable prototype
+
+    This prototype can be attached to any module making it importable. Data imports can both be done between ViUR2
+    and ViUR3 systems. Only the JSON interface is used.
+
+    The module then requires for a *import_conf* to be defined (see below) and provides several functions for triggering
+    and maintenance. The prototype is used in combination with the importer module from the root.
+    """
+
+    import_conf = {
+        "url": None,  # Source portal URL
+        "creds": None,   # Source portal login method & credentials
+        "module": None,  # Source module; if None, same name as the importable module will be used.
+        "translate": None,  # Translation dictionary; if omitted, it will be generated from bone:bone
+        "translate.update": None,  # Translation dictionary; extend and automatically generated one (if translate==None)
+        "translate.ignore": None,  # Bones to be ignored in automatically generated translation
+        "action": "list",  # Action to run, default is "list"
+        "limit": 99,  # Amount of items to fetch per request (only for list-ables)
+        "render": "vi",  # Renderer to run on
+        "params": None,  # Further parameters passed to the action
+        "follow": [],  # Following modules to be imported, that depend on this import.
+        "filter": {},  # Define a custom filter to be used for preparation and cleaning
+        "updateRelations": True,  # Allows to disable update relation tasks enforcements when configured to False.
+        "enforce": False,  # Enforce all full skeletons to be rewritten.
+        "skip": lambda values: False,  # don't skip any entry by default
+        "inform": False,  # either an e-mail address to inform, or True for current user, False otherwise.
+    }
+    _tr = None  # the final translation table once created by create_config()
+
+    @staticmethod
+    def translate_key(skel, bone, value, **_):
+        """
+        Helper function to replace a key during translation, even if its not a keyBone.
+        """
+        if not value:
+            return 0
+        try:
+            key = db.Key.from_legacy_urlsafe(value)
+            assert not key.parent, "Not implemented"
+        except:
+            logging.exception("Can't convert key")
+            return 0
+
+        if skel[bone] != key:
+            skel[bone] = key
+            return 1
+
+        return 0
+
+    @staticmethod
+    def translate_select_values(skel, bone_name, value, matching):
+        """
+        Helper to rewrite select values from a given matching table.
+        """
+        is_list = True
+        if not isinstance(value, list):
+            value = [value]
+            is_list = False
+
+        changes = 0
+        new_value = []
+
+        for val in value:
+            if val in matching:
+                val = matching[val]
+            new_value.append(val)
+
+        if not skel[bone_name] or set(skel[bone_name]) != set(new_value):
+            if not is_list:
+                skel.setBoneValue(bone_name, new_value[0])
+            else:
+                skel.setBoneValue(bone_name, new_value)
+
+            changes += 1
+
+        return changes
+
+    def get_handler(self):
+        admin_info = self.describe()
+        assert (handler := admin_info.get("handler"))
+        return handler.split(".", 1)[0]
+
+    def importSkel(self, skelType=None):
+        handler = self.get_handler()
+
+        if handler in ["hierarchy", "tree"]:
+            try:
+                return self.editSkel(skelType=skelType)
+            except:
+                pass
+
+        return self.editSkel()
+
+    @exposed
+    def start_import(
+        self,
+        follow: bool = False,
+        enforce: bool = False,
+        inform: str = None,
+        dry_run: bool = False,
+        otp=None,
+        debug: bool = False,
+        *args,
+        **kwargs,
+    ):
+        cuser = current.user.get()
+        if not cuser or "root" not in cuser["access"]:
+            raise errors.Unauthorized()
+
+        # Additional credentials
+        import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+
+        creds = import_conf.get("creds") or {}
+
+        if creds.get("type") == "viur" and creds.get("auth") == "userpassword+otp":
+            # Hint for OTP
+            if not otp:
+                raise errors.BadRequest("Requires 'otp' key to succeed")
+
+            creds["otp"] = otp
+
+        if self.get_handler() == "tree" and "skelType" not in kwargs:
+            kwargs["skelType"] = "node"
+            kwargs["_autoSkelType"] = True
+
+        if not inform:
+            inform = import_conf.get("inform", False)
+            inform = inform if isinstance(inform, str) else cuser["name"] if inform else None
+
+        self.do_import(
+            inform=inform,
+            follow=follow,
+            enforce=enforce,
+            dry_run=dry_run,
+            creds=creds or None,
+            debug=debug,
+            _queue="import",
+            **kwargs,
+        )
+
+        info = f"Import of {self.moduleName} kicked off"
+        if inform:
+            info += f", {inform} will be notified by e-mail on finish"
+
+        return info
+
+    @CallDeferred
+    def do_import(
+        self,
+        importdate=None,
+        inform=None,
+        spawn=0,
+        cursor=None,
+        total=0,
+        updated=0,
+        follow=False,
+        enforce=False,
+        dry_run=False,
+        cookies=None,
+        creds=None,
+        delete_filter=None,
+        debug: bool = False,
+        **kwargs,
+    ):
+        import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+        assert import_conf.get("url"), "No URL specified to import from"
+
+        # Mark this request as an import task
+        current.request.get().kwargs["isImportTask"] = True  # FIXME!
+        if importdate is None:
+            importdate = utils.utcNow().replace(microsecond=0)  # need to remove microseconds!!!
+
+        logging.debug(f"{self.moduleName!r} {importdate=} {total=}")
+
+        # Login
+        imp = Importer(
+            import_conf.get("url"),
+            import_conf.get("creds") or {} | creds or {},
+            render=import_conf.get("render", "vi"),
+            cookies=cookies,
+        )
+
+        # In case of a hierarchy, always assume skelType "node"
+        handler = self.get_handler()
+        if handler == "hierarchy":
+            kwargs["skelType"] = "node"
+        elif handler == "tree":
+            if "skelType" not in kwargs:
+                raise ValueError("kwargs __must__ contain skelType in case of a tree")
+
+        if not kwargs:
+            params = {}
+        else:
+            params = kwargs.copy()
+
+        if conf_params := import_conf.get("params"):
+            if callable(conf_params):
+                conf_params = conf_params(cursor)
+
+            assert isinstance(
+                params, dict
+            ), "import_conf[\"params\"] must be either 'dict' or 'callable' returning dict"
+            params.update(conf_params)
+
+        if "limit" not in params:
+            params["limit"] = import_conf.get("limit", 99)
+            params["amount"] = import_conf.get("limit", 99)
+
+        if "cursor" not in params:
+            params["cursor"] = cursor
+
+        url = f"""{import_conf.get("module", self.moduleName)}/{import_conf.get("action", "list")}"""
+        answ = imp.post(url, params=params, timeout=60)
+
+        if not answ.ok:
+            logging.error(f"Cannot fetch list from {url=}, {answ.status_code=}")
+            raise errors.BadRequest()
+
+        try:
+            answ = answ.json()
+
+        except:
+            logging.warning(
+                "Target module %r does not exist in source or some other error occured - skipping",
+                import_conf.get("module", self.moduleName),
+            )
+            self._kickoff_follow(importdate, inform, **kwargs)
+            return
+
+        # Get skeleton
+        skel = self.importSkel(skelType=kwargs.get("skelType"))
+
+        self.create_config(skel)
+
+        # Perform import
+        if isinstance(answ, dict):
+            skellist = answ.get("skellist")
+            cursor = answ.get("cursor")
+        elif isinstance(answ, list):
+            skellist = answ
+
+        for values in skellist:
+            total += 1
+
+            if "skip" in import_conf and import_conf["skip"](values):
+                continue
+
+            # logging.debug(f"{values=}")
+
+            if self._convert_entry(
+                imp,
+                skel,
+                values,
+                importdate,
+                skel_type=kwargs.get("skelType"),
+                enforce=enforce,
+                dry_run=dry_run,
+                updateRelations=import_conf.get("update_relations", True),
+                debug=debug,
+            ):
+                updated += 1
+
+                # if total >= 5:
+                #    skellist = ()
+                #    break
+
+        logging.info("%s: %d entries imported, %d entries updated", self.moduleName, total, updated)
+
+        if not skellist or cursor is None:
+            imp.logout()  # log-out now, as we're finished reading
+
+            # Clear deleted entries?
+            if "importdate" in skel:
+                self.do_clear(
+                    importdate,
+                    inform,
+                    total,
+                    updated,
+                    follow=follow,
+                    dry_run=dry_run,
+                    _queue="import",
+                    delete_filter=delete_filter,
+                    **kwargs,
+                )
+                return
+
+            logging.info(
+                "%s: Import finished; %d entries in total, %d updated",
+                self.moduleName,
+                total,
+                updated,
+            )
+
+            if inform:
+                email.sendEMail(
+                    dests=inform,
+                    tpl="import_finished",
+                    skel={
+                        "sourceportal": import_conf.get("url"),
+                        "targetportal": conf.instance.project_id.replace(
+                            "-viur", ""
+                        ),
+                        "sourcemodule": import_conf.get("module", self.moduleName),
+                        "targetmodule": self.moduleName,
+                        "total": total,
+                        "updated": updated,
+                        "removed": 0,
+                    },
+                )
+
+            self.onImportFinished(self.moduleName, total, updated)
+
+            if follow:
+                self._kickoff_follow(importdate, inform, **kwargs)
+
+            return True
+
+        self.do_import(
+            importdate=importdate,
+            inform=inform,
+            spawn=spawn + 1,
+            cursor=cursor,
+            total=total,
+            updated=updated,
+            follow=follow,
+            _queue="import",
+            dry_run=dry_run,
+            cookies=imp.cookies.get_dict(),
+            delete_filter=delete_filter,
+            **kwargs,
+        )
+
+        return True
+
+    def import_generate_translation(self, skel: SkeletonInstance) -> dict[str, t.Any]:
+        """
+        Automatically generates a 1-to-1 translation from the given skel.
+        Can be subclasses for custom behavior.
+        """
+        tr = {k: k for k in skel.keys()}
+
+        if "parentrepo" in skel:
+            tr["parentrepo"] = Importable.translate_key
+
+        if "parententry" in skel:
+            tr["parententry"] = Importable.translate_key
+
+            # ViUR2 legacy bullshit, in trees parententry was called parentdir...
+            tr["parentdir"] = lambda bone, **kwargs: Importable.translate_key(
+                bone="parententry", **kwargs
+            )
+
+        return tr
+
+    def create_config(self, skel):
+        import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+
+        # Get translation from config
+        tr = import_conf.get("translate")
+
+        # If it's a 1-to-1 list, make it a dict.
+        if isinstance(tr, list):
+            tr = {k: k for k in tr}
+
+        # Otherwise, when not specified, automatically construct a translation from the skeleton with some specials
+        elif tr is None:
+            tr = self.import_generate_translation(skel)
+
+        # update further bones to (probably automatic) translation
+        tr |= import_conf.get("translate.update") or {}
+
+        # Remove any bones that should be ignored
+        for k in list(tr.keys()):
+            if k in ["key", "changedate", "importdate"] + (
+                import_conf.get("translate.ignore") or []
+            ):
+                del tr[k]
+
+        assert isinstance(tr, dict), "translation must be specified as dict!"
+        self._tr = tr
+
+    def do_import_entry(
+        self, key, import_conf=None, module=None, kindName=None, skel_type="node",
+        debug: bool = False,
+    ):
+        if not import_conf:
+            import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+
+        importdate = utils.utcNow()
+
+        # Login
+        try:
+            imp = Importer(
+                import_conf.get("url"), import_conf.get("creds") or {},
+                render=import_conf.get("render", "vi")
+            )
+
+        except Exception as e:
+            logging.exception(e)
+            return
+
+        skel = self.importSkel(skelType=skel_type)
+
+        self.create_config(skel)
+
+        key = db.KeyClass.from_legacy_urlsafe(key)
+
+        if not kindName:
+            kindName = import_conf.get("module")
+
+        key = _AppKey(kindName, key.id_or_name)
+
+        project_id = import_conf.get("project_id")
+        assert project_id, f"Please set the project_id of portal {import_conf.get('url')}"
+        key = key.to_legacy_urlsafe(project_id=project_id).decode("utf-8")
+
+        if not module:
+            module = import_conf.get("module", self.moduleName)
+        url = f"{module}/view/{key}"
+
+        answ = imp.post(url, timeout=60)
+        if not answ.ok:
+            logging.error(
+                "Cannot fetch list from %r, error %d occured", url, answ.status_code
+            )
+            raise errors.BadRequest()
+
+        try:
+            answ = answ.json()
+        except:
+            logging.warning(
+                "Target module %r does not exist in source or some other error occured - skipping",
+                import_conf.get("module", self.moduleName),
+            )
+            return
+        values = answ["values"]
+
+        return self._convert_entry(
+            imp,
+            skel,
+            values,
+            importdate,
+            skel_type,
+            enforce=import_conf.get("enforce", False),
+            updateRelations=import_conf.get("updateRelations", True),
+            debug=debug,
+        )
+
+    def _convert_entry(
+        self,
+        imp,
+        skel,
+        values,
+        importdate,
+        skel_type=None,
+        enforce=False,
+        dry_run=False,
+        updateRelations=True,
+        debug: bool = False,
+    ):
+        """
+        Internal function for converting one entry.
+        """
+        skel.setEntity(db.Entity())
+        ret = imp.toSkel(
+            skel,
+            values,
+            self._tr,
+            sourceKey="key" if "key" in values else "id",
+            enforce=enforce,
+            debug=debug,
+        )
+
+        if "outdated" in skel:
+            skel["outdated"] = False
+
+        if dry_run:
+            logging.info(f"dry run {ret=}, {skel=}")
+            return ret != 0
+
+        if ret != 0 or enforce:
+            if not self.onEntryChanged(skel, values):
+                return False
+
+            # Set importdate when available
+            if "importdate" in skel:
+                logging.debug(
+                    "%s: Setting importdate on %r to %r",
+                    self.moduleName,
+                    skel["key"],
+                    importdate,
+                )
+                skel["importdate"] = importdate
+            try:
+                assert skel.toDB(update_relations=updateRelations)
+            except Exception as e:
+                logging.error(f"cannot convert {skel['key']}    {skel!r}")
+                raise e
+
+            handler = self.get_handler()
+
+            if handler in ["hierarchy", "tree"]:
+                if ret < 0:
+                    self.onAdded(skel_type, skel)
+                else:
+                    self.onEdited(skel_type, skel)
+            else:
+                if ret < 0:
+                    self.onAdded(skel)
+                else:
+                    self.onEdited(skel)
+
+            return True
+        else:
+            if not self.onEntryUnchanged(skel, values):
+                return False
+
+            # Save with importdate when required
+            if "importdate" in skel:
+                skel["importdate"] = importdate
+
+                assert skel.toDB(update_relations=True)
+        return False
+
+    def onEntryChanged(self, skel, values):
+        return True
+
+    def onEntryUnchanged(self, skel, values):
+        return True
+
+    def onImportFinished(self, moduleName, total, updated, **kwargs):
+        pass
+
+    def _kickoff_follow(self, importdate, inform, **kwargs):
+        # Check if tree type and nodes where imported, then import the leafs first
+        if (
+            self.get_handler() == "tree"
+            and kwargs.get("skelType") == "node"
+            and kwargs.get("_autoSkelType")
+        ):
+            kwargs["skelType"] = "leaf"
+            kwargs["_autoSkelType"] = True
+            self.do_import(importdate, inform, follow=True, **kwargs)
+            return
+
+        import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+
+        for name in import_conf.get("follow") or []:
+            # mod = getattr(conf.main_app, name, None)
+            mod = getattr(conf.main_app.vi, name, None)
+            if mod and isinstance(mod, Importable):
+                logging.info("%s: Kicking off import for %r", self.moduleName, name)
+                mod.do_import(importdate, inform=inform, follow=True, _queue="import")
+            else:
+                logging.warning("Cannot follow module '%r'", name)
+
+    @CallDeferred
+    def do_clear(
+        self,
+        importdate,
+        inform,
+        total,
+        updated,
+        import_conf=None,
+        cursor=None,
+        removed=0,
+        follow=False,
+        dry_run=False,
+        delete_filter=None,
+        **kwargs,
+    ):
+        logging.info("do_clear")
+        _importConfName = import_conf
+        if import_conf:
+            _importConf = getattr(self, import_conf)
+            import_conf = _importConf() if callable(_importConf) else _importConf
+        else:
+            import_conf = (
+                self.import_conf() if callable(self.import_conf) else self.import_conf
+            )
+
+        assert import_conf.get("url"), "No URL specified to import from"
+
+        # Mark this request as an import task
+        current.request.get().kwargs["isImportTask"] = True
+
+        # Get skeleton
+        skel = self.importSkel(skelType=kwargs.get("skelType"))
+        assert skel
+
+        q = skel.all()
+
+        if not delete_filter:
+            delete_filter = {}
+
+        if conf_filter := import_conf.get("filter"):
+            delete_filter.update(conf_filter)
+
+        q.filter("importdate <", importdate)
+        q = q.mergeExternalFilter(delete_filter)
+
+        if not q:
+            logging.error("filter prohibits clearing")
+            return
+
+        if cursor:
+            q.setCursor(cursor)
+
+        fetched = 0
+        for skel in q.fetch(limit=99):
+            logging.debug(
+                "%s: Deleting %r with importdate %r",
+                self.moduleName,
+                skel["key"],
+                skel["importdate"],
+            )
+
+            if "import_behavior" in skel and skel["import_behavior"] in [
+                "only_override",
+                "keep",
+            ]:
+                continue  # don't remove this marked entries
+
+            if "outdated" in skel:
+                skel["outdated"] = True
+
+                if dry_run:
+                    logging.info(f"dry run outdating {skel=}")
+                    continue
+
+                skel.toDB()
+            else:
+                if dry_run:
+                    logging.info(f"dry run deleting {skel=}")
+                    continue
+
+                skel.delete()
+
+                if self.get_handler() in ["hierarchy", "tree"]:
+                    self.onDeleted(kwargs["skelType"], skel)
+                else:
+                    self.onDeleted(skel)
+
+            fetched += 1
+            removed += 1
+
+        logging.info(
+            "%s: %d entries %s",
+            self.moduleName,
+            fetched,
+            "flagged outdated" if "outdated" in skel else "deleted",
+        )
+
+        if fetched and (cursor := q.getCursor()):
+            self.do_clear(
+                importdate,
+                inform,
+                total,
+                updated,
+                cursor=cursor,
+                removed=removed,
+                import_conf=_importConfName,
+                follow=follow,
+                _queue="import",
+                delete_filter=delete_filter,
+                **kwargs,
+            )
+            return
+
+        logging.info(
+            "%s: Import finished, %d entries in total, %d updated, %d deleted",
+            self.moduleName,
+            total,
+            updated,
+            removed,
+        )
+
+        if inform:  # No email
+            email.sendEMail(
+                dests=inform,
+                tpl="import_finished",
+                skel={
+                    "sourceportal": import_conf.get("url"),
+                    "targetportal": conf.instance.project_id.replace(
+                        "-viur", ""
+                    ),
+                    "sourcemodule": import_conf.get("module", self.moduleName),
+                    "targetmodule": self.moduleName,
+                    "total": total,
+                    "updated": updated,
+                    "removed": removed,
+                },
+            )
+
+        self.onImportFinished(self.moduleName, total, updated, **kwargs)
+
+        if follow:
+            self._kickoff_follow(importdate, inform, **kwargs)
