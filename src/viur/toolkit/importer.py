@@ -28,19 +28,16 @@ logger = logging.getLogger(__name__)
 
 class Importer(requests.Session):
 
-    def __init__(self, url, creds, render="vi", cookies=None):
+    def __init__(self, source, render="vi", cookies=None):
         super().__init__()
 
+        url = source["url"]
         if not url:
-            raise IOError(f"Importer disabled by configuration")
-
-        assert "type" in creds, f"Configuration for {url=} is incomplete"
-        if creds["type"] == "viur":
-            assert all([x in creds for x in ["auth", "host"]]), f"Configuration for {url=} is incomplete"
+            raise IOError("Importer disabled by configuration")
 
         self.host = url
         self.render = render
-        self.method = creds.get("auth")
+        self.method = source.get("auth")
         self.secretname = self.user = self.password = self.key = self.otp = None
 
         if cookies:
@@ -49,16 +46,16 @@ class Importer(requests.Session):
             return
 
         if self.method == "userpassword":
-            self.user = creds["user"]
-            self.password = creds["pass"]
+            self.user = source["user"]
+            self.password = source["pass"]
         elif self.method == "userpassword+otp":
-            self.user = creds["user"]
-            self.password = creds["pass"]
-            self.otp = creds["otp"]
+            self.user = source["user"]
+            self.password = source["pass"]
+            self.otp = source["otp"]
         elif self.method in ["secretkey", "loginkey"]:
-            self.secretname = creds.get("keyname", "secret")
+            self.secretname = source.get("keyname", "secret")
 
-            if module := creds.get("from"):
+            if module := source.get("from"):
                 assert "." in module
                 module, key = module.split(".", 1)
 
@@ -66,7 +63,7 @@ class Importer(requests.Session):
                 mod = db.Get(db.Key(mod.viewSkel().kindName, mod.getKey()))
                 self.key = mod[key]
             else:
-                self.key = creds.get("key")
+                self.key = source.get("key")
 
             assert self.key, "No key defined?"
 
@@ -150,7 +147,7 @@ class Importer(requests.Session):
                 logger.error(f"Unable to logon to {self.host!r}, got {answ=} with {answ.text=}")
                 return False
 
-        logger.debug(f"HELLO {self.url}")
+        logger.debug(f"HELLO {self.host}")
         return True
 
     def list(self, module, *args, **kwargs):
@@ -637,7 +634,7 @@ class Importer(requests.Session):
         skel: SkeletonInstance,
         values: dict,
         translate: dict = {},
-        reset: t.Optional[str, t.Iterable[str]] = None,
+        reset: t.Optional[str | t.Iterable[str]] = None,
         source_key: str = "key",
         update: bool = True,
         enforce: bool = False,
@@ -743,8 +740,11 @@ class Importable:
 
     # !!!TODO!!! Should be turned into a class!
     import_conf = {
-        "url": None,  # Source portal URL
-        "creds": None,   # Source portal login method & credentials
+        "source": {
+            "url": None,  # this is mandatory!
+            "auth": "viur",  # It can also be other sources used
+            "method": "userpassword"  # TODO: Document all types
+        },
         "module": None,  # Source module; if None, same name as the importable module will be used.
         "translate": None,  # Translation dictionary; if omitted, it will be generated from bone:bone
         "translate.update": None,  # Translation dictionary; extend and automatically generated one (if translate==None)
@@ -818,7 +818,7 @@ class Importable:
     def import_skel(self, skelType=None):
         handler = self.get_handler()
 
-        if handler in ["hierarchy", "tree"]:
+        if handler == "tree":
             try:
                 return self.editSkel(skelType=skelType)
             except:
@@ -829,13 +829,13 @@ class Importable:
     @exposed
     def start_import(
         self,
+        *,
         follow: bool = False,
         enforce: bool = False,
         inform: str = None,
         dry_run: bool = False,
         otp=None,
         debug: bool = False,
-        *args,
         **kwargs,
     ):
         cuser = current.user.get()
@@ -845,18 +845,18 @@ class Importable:
         # Additional credentials
         import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
 
-        creds = import_conf.get("creds") or {}
+        source = import_conf.get("source") or {}
 
-        if creds.get("type") == "viur" and creds.get("auth") == "userpassword+otp":
+        if source.get("type") == "viur" and source.get("auth") == "userpassword+otp":
             # Hint for OTP
             if not otp:
                 raise errors.BadRequest("Requires 'otp' key to succeed")
 
-            creds["otp"] = otp
+            source["otp"] = otp
 
-        if self.get_handler() == "tree" and "skelType" not in kwargs:
-            kwargs["skelType"] = "node"
-            kwargs["_autoSkelType"] = True
+        if self.get_handler() == "tree":
+            kwargs.setdefault("skelType", "node")
+            kwargs.setdefault("_autoSkelType", True)
 
         if not inform:
             inform = import_conf.get("inform", False)
@@ -867,7 +867,7 @@ class Importable:
             follow=follow,
             enforce=enforce,
             dry_run=dry_run,
-            creds=creds or None,
+            source=source or None,
             debug=debug,
             _queue="import",
             **kwargs,
@@ -892,13 +892,13 @@ class Importable:
         enforce=False,
         dry_run=False,
         cookies=None,
-        creds=None,
+        source=None,
         delete_filter=None,
         debug: bool = False,
         **kwargs,
     ):
         import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
-        assert import_conf.get("url"), "No URL specified to import from"
+        assert import_conf.get("source"), "No source specified to import from"
 
         # Mark this request as an import task
         current.request.get().kwargs["isImportTask"] = True  # FIXME!
@@ -909,19 +909,15 @@ class Importable:
 
         # Login
         imp = Importer(
-            import_conf.get("url"),
-            import_conf.get("creds") or {} | creds or {},
+            import_conf.get("source") or {} | source or {},
             render=import_conf.get("render", "vi"),
             cookies=cookies,
         )
 
         # In case of a hierarchy, always assume skelType "node"
         handler = self.get_handler()
-        if handler == "hierarchy":
-            kwargs["skelType"] = "node"
-        elif handler == "tree":
-            if "skelType" not in kwargs:
-                raise ValueError("kwargs __must__ contain skelType in case of a tree")
+        if handler == "tree":
+            kwargs.setdefault("skelType", "node")
 
         if not kwargs:
             params = {}
@@ -1126,7 +1122,7 @@ class Importable:
         # Login
         try:
             imp = Importer(
-                import_conf.get("url"), import_conf.get("creds") or {},
+                import_conf.get("url"), import_conf.get("source") or {},
                 render=import_conf.get("render", "vi")
             )
 
@@ -1314,7 +1310,7 @@ class Importable:
                 self.import_conf() if callable(self.import_conf) else self.import_conf
             )
 
-        assert import_conf.get("url"), "No URL specified to import from"
+        assert import_conf.get("source"), "No source specified to import from"
 
         # Mark this request as an import task
         current.request.get().kwargs["isImportTask"] = True
