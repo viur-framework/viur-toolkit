@@ -25,6 +25,18 @@ from viur.core.tasks import CallDeferred
 
 logger = logging.getLogger(__name__)
 
+JINJA_EMAIL_TEMPLATE = """{{ skel["targetportal"] }}.{{ skel["targetmodule"] }} import done, total:{{ skel["total"]}}, updated:{{ skel["updated"]}}, removed:{{ skel["removed"]}}
+<!DOCTYPE html>
+<html lang="de">
+<body>
+    Der Import von {{ skel["sourceportal"] }}.{{ skel["sourcemodule"] }}
+    nach {{ skel["targetportal"] }}.{{ skel["targetmodule"] }} wurde erfolgreich durchgeführt.<br>
+
+    Es wurden {{ skel["total"]}} Datensätze geprüft, davon {{ skel["updated"] }} aktualisiert.<br>
+    {{ skel["removed"] }} Datensätze wurden gelöscht.
+</body>
+</html>"""
+
 
 class Importer(requests.Session):
 
@@ -832,7 +844,7 @@ class Importable:
         *,
         follow: bool = False,
         enforce: bool = False,
-        inform: str = None,
+        inform: str = "false",
         dry_run: bool = False,
         otp=None,
         debug: bool = False,
@@ -858,9 +870,11 @@ class Importable:
             kwargs.setdefault("skelType", "node")
             kwargs.setdefault("_autoSkelType", True)
 
-        if not inform:
-            inform = import_conf.get("inform", False)
-            inform = inform if isinstance(inform, str) else cuser["name"] if inform else None
+        if "@" not in inform:
+            inform = utils.parse.bool(inform)
+            inform = import_conf.get("inform") or inform
+
+        inform = inform if isinstance(inform, str) else cuser["name"] if inform else None
 
         self.do_import(
             inform=inform,
@@ -1025,9 +1039,9 @@ class Importable:
             if inform:
                 email.sendEMail(
                     dests=inform,
-                    tpl="import_finished",
+                    stringTemplate=JINJA_EMAIL_TEMPLATE,
                     skel={
-                        "sourceportal": import_conf.get("url"),
+                        "sourceportal": import_conf["source"]["url"],
                         "targetportal": conf.instance.project_id.replace(
                             "-viur", ""
                         ),
@@ -1406,12 +1420,12 @@ class Importable:
             removed,
         )
 
-        if inform:  # No email
+        if inform:
             email.sendEMail(
                 dests=inform,
-                tpl="import_finished",
+                stringTemplate=JINJA_EMAIL_TEMPLATE,
                 skel={
-                    "sourceportal": import_conf.get("url"),
+                    "sourceportal": import_conf["source"]["url"],
                     "targetportal": conf.instance.project_id.replace(
                         "-viur", ""
                     ),
