@@ -1,5 +1,12 @@
 """
-Importer module, Importable prototype and some helpers.
+Tools for copying data from ViUR 1.x to ViUR 3.x systems by using the JSON interfaces.
+
+The module is split into two parts:
+
+1. `Importer` is a `requests.Session`-inherited class which provides helpers to convert from JSON
+   into a skeleton structure.
+2. `Importable` is a prototype that can be attached to any ViUR module to provide a configurable
+   and and hookable interface for executing imports, partly automatically.
 """
 import base64
 import html
@@ -164,19 +171,19 @@ class Importer(requests.Session):
 
         return req.json()
 
-    def flattenRelationalData(self, boneName, data):
+    def flatten_relational_data(self, bone_name, data):
         ret = {}
         if isinstance(data, list) or isinstance(data, dict):
             if isinstance(data, dict):
                 data = [data]
             for i, entry in enumerate(data):
-                prefix = boneName + ".%d." % i
+                prefix = bone_name + ".%d." % i
                 ret[prefix + "key"] = entry["dest"]["key"]
                 if entry["dest"]["rel"]:
                     for key, value in entry["dest"]["rel"].items():
                         ret[prefix + key] = value
         else:
-            ret[boneName] = data
+            ret[bone_name] = data
         return ret
 
     def view(self, module, key):
@@ -188,7 +195,7 @@ class Importer(requests.Session):
 
         return req.json()
 
-    def importFile(self, info):
+    def import_file(self, info):
         assert "dlkey" in info and "name" in info
 
         name = info["name"]
@@ -231,61 +238,49 @@ class Importer(requests.Session):
 
         logger.debug(f"{name=} has {len(content)!r} bytes")
 
-        key = conf.main_app.file.write(name, content, mimetype)
+        return conf.main_app.file.write(name, content, mimetype)
 
-        '''
-        if key:
-            # Ganz toll gelöst, damit es auch mit Umlauten klappt... Danke, Google.
-            fskel = fileBaseSkel()
-            fskel.fromDB(key)
-            fskel["name"] = name
-
-            return fskel.toDB(clearUpdateTag=True)
-        '''
-
-        return key
-
-    def setSkelValue(self, skel: SkeletonInstance, boneName: str, value: t.Any, debug: bool = False):
+    def set_skel_value(self, skel: SkeletonInstance, bone_name: str, value: t.Any, debug: bool = False):
         changes = 0
-        bone = getattr(skel, boneName)
+        bone = getattr(skel, bone_name)
 
         if bone is None:
             return changes
 
-        boneValue = skel[boneName]
+        bone_value = skel[bone_name]
         if isinstance(bone, bones.FileBone):
             knownFiles = {}
 
             if debug:
-                logger.debug(f"{boneValue=}")
+                logger.debug(f"{bone_value=}")
 
-            if boneValue:
+            if bone_value:
                 if bone.languages and isinstance(value, dict):
-                    if boneValue is None:
-                        boneValue = {}
+                    if bone_value is None:
+                        bone_value = {}
 
                     for lang, val in value.items():
                         if lang in bone.languages:
-                            if not boneValue.get(lang):
+                            if not bone_value.get(lang):
                                 continue
 
-                            if isinstance(boneValue[lang], dict):
-                                knownFiles[boneValue[lang]["dest"]["name"]] = boneValue[lang]
+                            if isinstance(bone_value[lang], dict):
+                                knownFiles[bone_value[lang]["dest"]["name"]] = bone_value[lang]
                             else:
-                                for entry in boneValue[lang]:
+                                for entry in bone_value[lang]:
                                     knownFiles[entry["dest"]["name"]] = entry
 
 
-                elif isinstance(skel[boneName], dict):
-                    knownFiles[skel[boneName]["dest"]["name"]] = skel[boneName]
+                elif isinstance(skel[bone_name], dict):
+                    knownFiles[skel[bone_name]["dest"]["name"]] = skel[bone_name]
                 else:
-                    for entry in skel[boneName]:
+                    for entry in skel[bone_name]:
                         knownFiles[entry["dest"]["name"]] = entry
 
             # knownFiles.clear() #Temporary enabled to clear all files
 
             if debug:
-                logger.debug(f"{boneName} knownFiles = {knownFiles!r}")
+                logger.debug(f"{bone_name} knownFiles = {knownFiles!r}")
 
             def handle_entries(changes, value, lang=None):
                 for entry in value:
@@ -301,39 +296,39 @@ class Importer(requests.Session):
 
                     if fileName not in knownFiles:
                         if debug:
-                            logger.debug(f"{boneName} name {fileName=} is not known")
+                            logger.debug(f"{bone_name} name {fileName=} is not known")
 
-                        key = self.importFile(entry["dest"])
+                        key = self.import_file(entry["dest"])
                         if not key:
                             continue
-                        # assert (key := self.importFile(entry["dest"]))
+                        # assert (key := self.import_file(entry["dest"]))
 
                     if not bone.using:
                         if key:
-                            if skel.setBoneValue(boneName, key, append=bone.multiple, language=lang):
+                            if skel.setBoneValue(bone_name, key, append=bone.multiple, language=lang):
                                 changes += 1
                             else:
-                                logger.error(f"Unable to set bone {boneName} to {key}")
+                                logger.error(f"Unable to set bone {bone_name} to {key}")
 
                     else:
                         assert entry["rel"]
-                        usingSkel = bone.using()
-                        usingSkel.unserialize(knownFiles[fileName]["rel"] if fileName in knownFiles else {})
-                        changes += self.translate(usingSkel, entry["rel"])
+                        using_skel = bone.using()
+                        using_skel.unserialize(knownFiles[fileName]["rel"] if fileName in knownFiles else {})
+                        changes += self.translate(using_skel, entry["rel"])
 
                         if key:
-                            if skel.setBoneValue(boneName, (key, usingSkel), append=bone.multiple, language=lang):
+                            if skel.setBoneValue(bone_name, (key, using_skel), append=bone.multiple, language=lang):
                                 changes += 1
                             else:
-                                logger.error(f"Unable to set bone {boneName} to {key}")
+                                logger.error(f"Unable to set bone {bone_name} to {key}")
                         else:
-                            knownFiles[fileName]["rel"].unserialize(usingSkel.dbEntity)
+                            knownFiles[fileName]["rel"].unserialize(using_skel.dbEntity)
                 return changes
 
             if bone.languages and isinstance(value, dict):
                 for lang, val in value.items():
                     if lang in bone.languages:
-                        if not boneValue.get(lang):
+                        if not bone_value.get(lang):
                             continue
 
                         if isinstance(val, dict):
@@ -354,101 +349,96 @@ class Importer(requests.Session):
             elif value is None:
                 value = []
 
-            if boneValue and isinstance(boneValue, (dict, str, type(db.Key))):
-                boneValue = [boneValue]
-            elif not boneValue:
-                boneValue = []
+            if bone_value and isinstance(bone_value, (dict, str, type(db.Key))):
+                bone_value = [bone_value]
+            elif not bone_value:
+                bone_value = []
 
-            skel[boneName] = None
+            skel[bone_name] = None
 
             # A difference in length is always a diff indicator!
-            if len(value) != len(boneValue):
+            if len(value) != len(bone_value):
                 changes += 1
 
             # Deep iterate through bone values
             for nentry in value:
-                if boneValue:
+                if bone_value:
                     # There is an old entry
-                    oentry = boneValue.pop(0)
+                    oentry = bone_value.pop(0)
 
                 else:
                     # Old entry does not exist
                     oentry = None
 
                 if bone.using:
-                    usingSkel = bone.using()
+                    using_skel = bone.using()
                 else:
-                    usingSkel = None
+                    using_skel = None
 
                 # Rewrite the key of the referenced entity
                 if isinstance(nentry, dict):
                     assert "rel" in nentry and "dest" in nentry, "This doesn't look like a RelationalBone"
-
-                    if db.KeyClass.from_legacy_urlsafe(nentry["dest"]["key"]).id_or_name in name_fix:
-                        key = db.Key(bone.kind,
-                                     name_fix[db.KeyClass.from_legacy_urlsafe(nentry["dest"]["key"]).id_or_name])
-                    else:
-                        key = db.Key(bone.kind, db.KeyClass.from_legacy_urlsafe(nentry["dest"]["key"]).id_or_name)
+                    key = db.Key(bone.kind, db.KeyClass.from_legacy_urlsafe(nentry["dest"]["key"]).id_or_name)
 
                 elif isinstance(nentry, (str, db.Key)):
                     key = nentry
                 else:
                     raise ValueError()
 
-                # In case of an usingSkel, check for differences also.
-                if usingSkel:
-                    usingSkel.unserialize(oentry["rel"] if oentry else {})
+                # In case of an using_skel, check for differences also.
+                if using_skel:
+                    using_skel.unserialize(oentry["rel"] if oentry else {})
                     changes += self.translate(
-                        usingSkel, nentry["rel"] or {},
-                        {k: k for k in usingSkel.keys()},
+                        using_skel, nentry["rel"] or {},
+                        {k: k for k in using_skel.keys()},
                         debug=debug
                     )
 
-                    if not skel.setBoneValue(boneName, (key, usingSkel), append=bone.multiple):
-                        logger.error(f"Unable to set bone {boneName} to {key}")
+                    if not skel.setBoneValue(bone_name, (key, using_skel), append=bone.multiple):
+                        logger.error(f"Unable to set bone {bone_name} to {key}")
 
-                elif not skel.setBoneValue(boneName, key, append=bone.multiple):
-                    logger.error(f"Unable to set bone {boneName} to {key}")
+                elif not skel.setBoneValue(bone_name, key, append=bone.multiple):
+                    logger.error(f"Unable to set bone {bone_name} to {key}")
 
         elif isinstance(bone, bones.RecordBone):
             def set_value(val, lang):
-                nonlocal boneValue, changes, key
+                nonlocal bone_value, changes, key
 
                 if isinstance(val, (dict, str, db.Key)):
                     val = [val]
                 elif val is None:
                     val = []
 
-                if boneValue and isinstance(boneValue, (dict, str, db.Key)):
-                    boneValue = [boneValue]
-                elif not boneValue:
-                    boneValue = []
+                if bone_value and isinstance(bone_value, (dict, str, db.Key)):
+                    bone_value = [bone_value]
+                elif not bone_value:
+                    bone_value = []
 
                 if bone.languages:
-                    skel[boneName] = {lang: [] if bone.multiple else None
+                    skel[bone_name] = {lang: [] if bone.multiple else None
                                       for lang in bone.languages}
                 else:
-                    skel[boneName] = [] if bone.multiple else None
+                    skel[bone_name] = [] if bone.multiple else None
 
                 for nentry in val:
-                    if boneValue:
+                    if bone_value:
                         # There is an old entry
-                        oentry = boneValue.pop(0)
+                        oentry = bone_value.pop(0)
 
                     else:
                         # Old entry does not exist
                         oentry = None
                         changes += 1
 
-                    usingSkel = bone.using()
-                    usingSkel.unserialize(oentry or {})
+                    using_skel = bone.using()
+                    using_skel.unserialize(oentry or {})
 
-                    changes += self.translate(usingSkel, nentry, {k: k for k in usingSkel.keys()}, debug=debug)
+                    changes += self.translate(using_skel, nentry, {k: k for k in using_skel.keys()}, debug=debug)
 
                     if debug:
-                        logger.debug(f"Assign {boneName=}, {usingSkel=}, append={bone.multiple}, language={lang}")
-                    if not skel.setBoneValue(boneName, usingSkel, append=bone.multiple, language=lang):
-                        logger.error(f"Unable to set bone {boneName}.{lang} to {usingSkel}")
+                        logger.debug(f"Assign {bone_name=}, {using_skel=}, append={bone.multiple}, language={lang}")
+                    if not skel.setBoneValue(bone_name, using_skel, append=bone.multiple, language=lang):
+                        logger.error(f"Unable to set bone {bone_name}.{lang} to {using_skel}")
 
             if debug:
                 logger.debug(f"{bone.languages=} // {value}")
@@ -462,17 +452,17 @@ class Importer(requests.Session):
 
 
         elif bone.languages and isinstance(value, dict):
-            if boneValue is None:
-                boneValue = {}
+            if bone_value is None:
+                bone_value = {}
 
             if debug:
-                logger.debug(f"{boneValue=} {value=} {bone=}")
+                logger.debug(f"{bone_value=} {value=} {bone=}")
 
             for lang, val in value.items():
                 if lang in bone.languages:
-                    if lang not in boneValue:
+                    if lang not in bone_value:
                         changes += 1
-                    elif boneValue[lang] != val:
+                    elif bone_value[lang] != val:
                         changes += 1
 
                     if bone.multiple:
@@ -483,14 +473,14 @@ class Importer(requests.Session):
                         elif not isinstance(val, list):
                             logger.warning(f"Unexpected {val=}")
 
-                    boneValue[lang] = val
+                    bone_value[lang] = val
 
-            skel[boneName] = boneValue
+            skel[bone_name] = bone_value
 
         elif isinstance(bone, bones.DateBone):
-            skel.setBoneValue(boneName, value)
+            skel.setBoneValue(bone_name, value)
 
-            if boneValue != skel[boneName]:
+            if bone_value != skel[bone_name]:
                 changes += 1
 
         else:
@@ -501,12 +491,12 @@ class Importer(requests.Session):
                 if isinstance(value, list) and len(value) == 1:
                     value = value[0]
 
-            new_value_as_str = html.unescape(str(boneValue)).strip()
+            new_value_as_str = html.unescape(str(bone_value)).strip()
             old_value_as_str = html.unescape(str(value)).strip()
 
             if debug:
                 logger.debug(
-                    f"{boneName} old={old_value_as_str!r} != new:{new_value_as_str!r}? "
+                    f"{bone_name} old={old_value_as_str!r} != new:{new_value_as_str!r}? "
                     f"{new_value_as_str != old_value_as_str!r}"
                 )
 
@@ -514,31 +504,31 @@ class Importer(requests.Session):
                 if bone.multiple and not isinstance(value, list):
                     value = [value]
 
-                skel[boneName] = value
+                skel[bone_name] = value
                 changes += 1
 
                 if debug:
-                    logger.debug(f"{boneName} new value {skel[boneName]=}")
+                    logger.debug(f"{bone_name} new value {skel[bone_name]=}")
 
                 '''
                 # Turn value into a list to avoid implementing below code twice
                 if not isinstance(value, list):
                     value = [value]
 
-                skel[boneName] = None
+                skel[bone_name] = None
 
                 for val in value:
-                    if skel.setBoneValue(boneName, str(val), append=bone.multiple):
+                    if skel.setBoneValue(bone_name, str(val), append=bone.multiple):
                         changes += 1
                     else:
-                        logger.error("Unable to set bone %r to %r", boneName, val)
+                        logger.error("Unable to set bone %r to %r", bone_name, val)
 
                 if debug:
-                    logger.debug("%s new value %r", boneName, skel[boneName])
+                    logger.debug("%s new value %r", bone_name, skel[bone_name])
                 '''
 
         # if changes:
-        #	logger.debug("%r has %d changes", boneName, changes)
+        #	logger.debug("%r has %d changes", bone_name, changes)
 
         return changes
 
@@ -569,7 +559,7 @@ class Importer(requests.Session):
                             if lookfor in skel:
                                 old = skel[lookfor]
 
-                                # Set to empty (don't do this with setSkelValue)
+                                # Set to empty (don't do this with set_skel_value)
                                 if not v:
                                     if skel[lookfor]:
                                         if debug:
@@ -579,7 +569,7 @@ class Importer(requests.Session):
 
                                     skel[lookfor] = getattr(skel, lookfor).getDefaultValue(skel)
 
-                                elif ch := self.setSkelValue(skel, lookfor, v, debug=debug):
+                                elif ch := self.set_skel_value(skel, lookfor, v, debug=debug):
                                     if debug:
                                         logger.debug(f"{lookfor!r} changed from {old!r} to {skel[lookfor]!r}")
 
@@ -601,7 +591,7 @@ class Importer(requests.Session):
                     if tr in skel:
                         old = skel[tr]
 
-                        # Set to empty (don't do this with setSkelValue)
+                        # Set to empty (don't do this with set_skel_value)
                         if not values[bone]:
                             if skel[tr]:
                                 if debug:
@@ -618,7 +608,7 @@ class Importer(requests.Session):
                                 logger.debug(f"setting {tr!r} to {values[bone]!r}")
 
                             try:
-                                if ch := self.setSkelValue(skel, tr, values[bone], debug=debug):
+                                if ch := self.set_skel_value(skel, tr, values[bone], debug=debug):
                                     if debug:
                                         logger.debug(f"{tr!r} changed from {old!r} to {skel[tr]!r}")
 
@@ -642,24 +632,33 @@ class Importer(requests.Session):
 
         return changes
 
-    def toSkel(self, skel: SkeletonInstance, values, translate={}, reset=None, sourceKey="key", update=True,
-               enforce=False, debug: bool = False):
+    def values_to_skel(
+        self,
+        skel: SkeletonInstance,
+        values: dict,
+        translate: dict = {},
+        reset: t.Optional[str, t.Iterable[str]] = None,
+        source_key: str = "key",
+        update: bool = True,
+        enforce: bool = False,
+        debug: bool = False
+    ):
         # assert isinstance(skel, skeleton.BaseSkeleton), "'skel' must be a BaseSkeleton instance"
-        assert sourceKey in values, f"'{sourceKey}' not in values"
+        assert source_key in values, f"'{source_key}' not in values"
 
         changes = 0
         exists = True
 
         try:
-            key = db.KeyClass.from_legacy_urlsafe(values[sourceKey])
+            key = db.KeyClass.from_legacy_urlsafe(values[source_key])
         except AttributeError:
-            key = db.keyHelper(values[sourceKey], skel.kindName)
+            key = db.keyHelper(values[source_key], skel.kindName)
 
         key = db.Key(skel.kindName, key.id_or_name)
 
         success = skel.fromDB(key)
 
-        if "import_behavior" in skel and skel["import_behavior"] in ["preserve", "keep"]:
+        if "import_behavior" in skel and skel["import_behavior"] in ("preserve", "keep"):
             return changes  # dont change skels with this behaviors
 
         if not enforce and success:
@@ -691,7 +690,7 @@ class Importer(requests.Session):
             logger.debug(f"{skel.kindName} {key=} detected {changes=}")
 
         if debug:
-            logger.debug("--- toSkel ---")
+            logger.debug("--- values_to_skel ---")
 
             for bone in skel.keys():
                 logger.debug(
@@ -742,6 +741,7 @@ class Importable:
     and maintenance. The prototype is used in combination with the importer module from the root.
     """
 
+    # !!!TODO!!! Should be turned into a class!
     import_conf = {
         "url": None,  # Source portal URL
         "creds": None,   # Source portal login method & credentials
@@ -760,7 +760,7 @@ class Importable:
         "skip": lambda values: False,  # don't skip any entry by default
         "inform": False,  # either an e-mail address to inform, or True for current user, False otherwise.
     }
-    _tr = None  # the final translation table once created by create_config()
+    _bone_translation_table = None  # the final translation table once created by create_config()
 
     @staticmethod
     def translate_key(skel, bone, value, **_):
@@ -815,7 +815,7 @@ class Importable:
         assert (handler := admin_info.get("handler"))
         return handler.split(".", 1)[0]
 
-    def importSkel(self, skelType=None):
+    def import_skel(self, skelType=None):
         handler = self.get_handler()
 
         if handler in ["hierarchy", "tree"]:
@@ -963,7 +963,7 @@ class Importable:
             return
 
         # Get skeleton
-        skel = self.importSkel(skelType=kwargs.get("skelType"))
+        skel = self.import_skel(skelType=kwargs.get("skelType"))
 
         self.create_config(skel)
 
@@ -1112,7 +1112,7 @@ class Importable:
                 del tr[k]
 
         assert isinstance(tr, dict), "translation must be specified as dict!"
-        self._tr = tr
+        self._bone_translation_table = tr
 
     def do_import_entry(
         self, key, import_conf=None, module=None, kindName=None, skel_type="node",
@@ -1134,7 +1134,7 @@ class Importable:
             logging.exception(e)
             return
 
-        skel = self.importSkel(skelType=skel_type)
+        skel = self.import_skel(skelType=skel_type)
 
         self.create_config(skel)
 
@@ -1197,11 +1197,11 @@ class Importable:
         Internal function for converting one entry.
         """
         skel.setEntity(db.Entity())
-        ret = imp.toSkel(
+        ret = imp.values_to_skel(
             skel,
             values,
-            self._tr,
-            sourceKey="key" if "key" in values else "id",
+            self._bone_translation_table,
+            source_key="key" if "key" in values else "id",  # ViUR 1.x
             enforce=enforce,
             debug=debug,
         )
@@ -1320,7 +1320,7 @@ class Importable:
         current.request.get().kwargs["isImportTask"] = True
 
         # Get skeleton
-        skel = self.importSkel(skelType=kwargs.get("skelType"))
+        skel = self.import_skel(skelType=kwargs.get("skelType"))
         assert skel
 
         q = skel.all()
