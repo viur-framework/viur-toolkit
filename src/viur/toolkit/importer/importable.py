@@ -5,6 +5,7 @@ and and hookable interface for executing imports, partly automatically.
 
 import base64
 import logging
+import time
 import typing as t
 from google.cloud.datastore import _app_engine_key_pb2
 from viur.core import conf, current, db, email, errors, utils
@@ -105,7 +106,7 @@ class Importable:
             key = db.Key.from_legacy_urlsafe(value)
             assert not key.parent, "Not implemented"
         except:
-            logging.exception("Can't convert key")
+            logger.exception("Can't convert key")
             return 0
 
         if skel[bone] != key:
@@ -239,7 +240,7 @@ class Importable:
         if importdate is None:
             importdate = utils.utcNow().replace(microsecond=0)  # need to remove microseconds!!!
 
-        logging.debug(f"{self.moduleName!r} {importdate=} {total=}")
+        logger.debug(f"{self.moduleName!r} {importdate=} {total=}")
 
         # Login
         imp = Importer(
@@ -278,14 +279,14 @@ class Importable:
         answ = imp.post(url, params=params, timeout=60)
 
         if not answ.ok:
-            logging.error(f"Cannot fetch list from {url=}, {answ.status_code=}")
+            logger.error(f"Cannot fetch list from {url=}, {answ.status_code=}")
             raise errors.BadRequest()
 
         try:
             answ = answ.json()
 
         except:
-            logging.warning(
+            logger.warning(
                 "Target module %r does not exist in source or some other error occured - skipping",
                 import_conf.get("module", self.moduleName),
             )
@@ -310,7 +311,7 @@ class Importable:
             if "skip" in import_conf and import_conf["skip"](values):
                 continue
 
-            # logging.debug(f"{values=}")
+            # logger.debug(f"{values=}")
 
             if self._convert_entry(
                 imp,
@@ -329,7 +330,7 @@ class Importable:
                 #    skellist = ()
                 #    break
 
-        logging.info("%s: %d entries imported, %d entries updated", self.moduleName, total, updated)
+        logger.info("%s: %d entries imported, %d entries updated", self.moduleName, total, updated)
 
         if not skellist or cursor is None:
             imp.logout()  # log-out now, as we're finished reading
@@ -349,7 +350,7 @@ class Importable:
                 )
                 return
 
-            logging.info(
+            logger.info(
                 "%s: Import finished; %d entries in total, %d updated",
                 self.moduleName,
                 total,
@@ -461,7 +462,7 @@ class Importable:
             )
 
         except Exception as e:
-            logging.exception(e)
+            logger.exception(e)
             return
 
         skel = self.import_skel(skelType=skel_type)
@@ -485,7 +486,7 @@ class Importable:
 
         answ = imp.post(url, timeout=60)
         if not answ.ok:
-            logging.error(
+            logger.error(
                 "Cannot fetch list from %r, error %d occured", url, answ.status_code
             )
             raise errors.BadRequest()
@@ -493,7 +494,7 @@ class Importable:
         try:
             answ = answ.json()
         except:
-            logging.warning(
+            logger.warning(
                 "Target module %r does not exist in source or some other error occured - skipping",
                 import_conf.get("module", self.moduleName),
             )
@@ -540,7 +541,7 @@ class Importable:
             skel["outdated"] = False
 
         if dry_run:
-            logging.info(f"dry run {ret=}, {skel=}")
+            logger.info(f"dry run {ret=}, {skel=}")
             return ret != 0
 
         if ret != 0 or enforce:
@@ -549,18 +550,28 @@ class Importable:
 
             # Set importdate when available
             if "importdate" in skel:
-                logging.debug(
+                logger.debug(
                     "%s: Setting importdate on %r to %r",
                     self.moduleName,
                     skel["key"],
                     importdate,
                 )
                 skel["importdate"] = importdate
-            try:
-                assert skel.toDB(update_relations=updateRelations)
-            except Exception as e:
-                logging.error(f"cannot convert {skel['key']}    {skel!r}")
-                raise e
+
+            for attempt in (rng := range(3)):  # TODO: Make it configureable
+                try:
+                    assert skel.toDB(update_relations=updateRelations)
+                except Exception as e:
+                    logger.exception(f"cannot convert {skel['key']} : {e!s}   {skel!r}")
+
+                    if attempt == rng.stop - rng.step:
+                        raise e
+
+                    logger.info(f"Waiting {2 ** attempt} seconds for the next attempt")
+                    time.sleep(2 ** attempt)
+
+                else:
+                    break
 
             handler = self.get_handler()
 
@@ -614,10 +625,10 @@ class Importable:
             # mod = getattr(conf.main_app, name, None)
             mod = getattr(conf.main_app.vi, name, None)
             if mod and isinstance(mod, Importable):
-                logging.info("%s: Kicking off import for %r", self.moduleName, name)
+                logger.info("%s: Kicking off import for %r", self.moduleName, name)
                 mod.do_import(importdate, inform=inform, follow=True, _queue="import")
             else:
-                logging.warning("Cannot follow module '%r'", name)
+                logger.warning("Cannot follow module '%r'", name)
 
     @CallDeferred
     def do_clear(
@@ -634,7 +645,7 @@ class Importable:
         delete_filter=None,
         **kwargs,
     ):
-        logging.info("do_clear")
+        logger.info("do_clear")
         _importConfName = import_conf
         if import_conf:
             _importConf = getattr(self, import_conf)
@@ -665,7 +676,7 @@ class Importable:
         q = q.mergeExternalFilter(delete_filter)
 
         if not q:
-            logging.error("filter prohibits clearing")
+            logger.error("filter prohibits clearing")
             return
 
         if cursor:
@@ -673,7 +684,7 @@ class Importable:
 
         fetched = 0
         for skel in q.fetch(limit=99):
-            logging.debug(
+            logger.debug(
                 "%s: Deleting %r with importdate %r",
                 self.moduleName,
                 skel["key"],
@@ -690,13 +701,13 @@ class Importable:
                 skel["outdated"] = True
 
                 if dry_run:
-                    logging.info(f"dry run outdating {skel=}")
+                    logger.info(f"dry run outdating {skel=}")
                     continue
 
                 skel.toDB()
             else:
                 if dry_run:
-                    logging.info(f"dry run deleting {skel=}")
+                    logger.info(f"dry run deleting {skel=}")
                     continue
 
                 skel.delete()
@@ -709,7 +720,7 @@ class Importable:
             fetched += 1
             removed += 1
 
-        logging.info(
+        logger.info(
             "%s: %d entries %s",
             self.moduleName,
             fetched,
@@ -732,7 +743,7 @@ class Importable:
             )
             return
 
-        logging.info(
+        logger.info(
             "%s: Import finished, %d entries in total, %d updated, %d deleted",
             self.moduleName,
             total,
