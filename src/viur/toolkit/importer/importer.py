@@ -9,9 +9,11 @@ import logging
 import mimetypes
 import numbers
 import re
-import requests
 import typing as t
-from viur.core import bones, conf, db, current, skeleton, utils
+
+import requests
+
+from viur.core import bones, conf, current, db, skeleton, utils
 
 NIL: t.Final = object()
 
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class Importer(requests.Session):
 
-    def __init__(self, source, render="vi", cookies=None):
+    def __init__(self, source: dict, render="vi", cookies=None):
         super().__init__()
 
         url = source["url"]

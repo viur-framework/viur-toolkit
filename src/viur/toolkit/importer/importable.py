@@ -7,13 +7,14 @@ import base64
 import logging
 import time
 import typing as t
+
 from google.cloud.datastore import _app_engine_key_pb2
+
 from viur.core import conf, current, db, email, errors, utils
 from viur.core.decorators import exposed
 from viur.core.skeleton import SkeletonInstance
 from viur.core.tasks import CallDeferred
 from .importer import Importer
-
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ class Importable:
         "inform": False,  # either an e-mail address to inform, or True for current user, False otherwise.
         "clear": True,  # Do do_clear and delete not imported entries
     }
-    _bone_translation_table = None  # the final translation table once created by create_config()
+    _bone_translation_table = {}  # the final translation table once created by create_config()
 
     def modify_skel_key(
         self,
@@ -180,6 +181,7 @@ class Importable:
         dry_run: bool = False,
         otp=None,
         debug: bool = False,
+        import_conf_name: str = "import_conf",
         **kwargs,
     ):
         cuser = current.user.get()
@@ -187,7 +189,8 @@ class Importable:
             raise errors.Unauthorized()
 
         # Additional credentials
-        import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+        import_conf = getattr(self, import_conf_name)
+        import_conf = import_conf() if callable(import_conf) else import_conf
 
         source = import_conf.get("source") or {}
 
@@ -215,6 +218,7 @@ class Importable:
             dry_run=dry_run,
             source=source or None,
             debug=debug,
+            import_conf_name=import_conf_name,
             _queue="import",
             **kwargs,
         )
@@ -241,9 +245,11 @@ class Importable:
         source=None,
         delete_filter=None,
         debug: bool = False,
+        import_conf_name: str = "import_conf",
         **kwargs,
     ):
-        import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+        import_conf = getattr(self, import_conf_name)
+        import_conf = import_conf() if callable(import_conf) else import_conf
         assert import_conf.get("source"), "No source specified to import from"
 
         # Mark this request as an import task
@@ -301,7 +307,7 @@ class Importable:
                 "Target module %r does not exist in source or some other error occured - skipping",
                 import_conf.get("module", self.moduleName),
             )
-            self._kickoff_follow(importdate, inform, **kwargs)
+            self._kickoff_follow(importdate, inform, import_conf_name=import_conf_name, **kwargs)
             return
 
         # Get skeleton
@@ -334,6 +340,7 @@ class Importable:
                 dry_run=dry_run,
                 updateRelations=import_conf.get("update_relations", True),
                 debug=debug,
+                import_conf_name=import_conf_name,
             ):
                 updated += 1
 
@@ -355,8 +362,9 @@ class Importable:
                     updated,
                     follow=follow,
                     dry_run=dry_run,
-                    _queue="import",
                     delete_filter=delete_filter,
+                    import_conf_name=import_conf_name,
+                    _queue="import",
                     **kwargs,
                 )
                 return
@@ -400,10 +408,11 @@ class Importable:
             total=total,
             updated=updated,
             follow=follow,
-            _queue="import",
             dry_run=dry_run,
             cookies=imp.cookies.get_dict(),
             delete_filter=delete_filter,
+            import_conf_name=import_conf_name,
+            _queue="import",
             **kwargs,
         )
 
@@ -429,8 +438,9 @@ class Importable:
 
         return tr
 
-    def create_config(self, skel):
-        import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+    def create_config(self, skel: SkeletonInstance, import_conf_name: str = "import_conf") -> None:
+        import_conf = getattr(self, import_conf_name)
+        import_conf = import_conf() if callable(import_conf) else import_conf
 
         # Get translation from config
         tr = import_conf.get("translate")
@@ -454,21 +464,22 @@ class Importable:
                 del tr[k]
 
         assert isinstance(tr, dict), "translation must be specified as dict!"
-        self._bone_translation_table = tr
+        self._bone_translation_table[import_conf_name] = tr
 
     def do_import_entry(
-        self, key, import_conf=None, module=None, kindName=None, skel_type="node",
+        self, key, module=None, kindName=None, skel_type="node",
         debug: bool = False,
+        import_conf_name: str = "import_conf",
     ):
-        if not import_conf:
-            import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+        import_conf = getattr(self, import_conf_name)
+        import_conf = import_conf() if callable(import_conf) else import_conf
 
         importdate = utils.utcNow()
 
         # Login
         try:
             imp = Importer(
-                import_conf.get("url"), import_conf.get("source") or {},
+                source=import_conf.get("source") or {},
                 render=import_conf.get("render", "vi")
             )
 
@@ -478,7 +489,7 @@ class Importable:
 
         skel = self.import_skel(skelType=skel_type)
 
-        self.create_config(skel)
+        self.create_config(skel, import_conf_name=import_conf_name)
 
         key = db.KeyClass.from_legacy_urlsafe(key)
 
@@ -521,6 +532,7 @@ class Importable:
             enforce=import_conf.get("enforce", False),
             updateRelations=import_conf.get("updateRelations", True),
             debug=debug,
+            import_conf_name=import_conf_name,
         )
 
     def _convert_entry(
@@ -534,6 +546,7 @@ class Importable:
         dry_run=False,
         updateRelations=True,
         debug: bool = False,
+        import_conf_name: str = "import_conf",
     ):
         """
         Internal function for converting one entry.
@@ -618,7 +631,7 @@ class Importable:
     def onImportFinished(self, moduleName, total, updated, **kwargs):
         pass
 
-    def _kickoff_follow(self, importdate, inform, **kwargs):
+    def _kickoff_follow(self, importdate, inform, import_conf_name: str = "import_conf", **kwargs):
         # Check if tree type and nodes where imported, then import the leafs first
         if (
             self.get_handler() == "tree"
@@ -630,7 +643,8 @@ class Importable:
             self.do_import(importdate, inform, follow=True, **kwargs)
             return
 
-        import_conf = self.import_conf() if callable(self.import_conf) else self.import_conf
+        import_conf = getattr(self, import_conf_name)
+        import_conf = import_conf() if callable(import_conf) else import_conf
 
         for name in import_conf.get("follow") or []:
             # mod = getattr(conf.main_app, name, None)
@@ -648,7 +662,7 @@ class Importable:
         inform,
         total,
         updated,
-        import_conf=None,
+        import_conf_name: str = "import_conf",
         cursor=None,
         removed=0,
         follow=False,
@@ -657,14 +671,8 @@ class Importable:
         **kwargs,
     ):
         logger.info("do_clear")
-        _importConfName = import_conf
-        if import_conf:
-            _importConf = getattr(self, import_conf)
-            import_conf = _importConf() if callable(_importConf) else _importConf
-        else:
-            import_conf = (
-                self.import_conf() if callable(self.import_conf) else self.import_conf
-            )
+        import_conf = getattr(self, import_conf_name)
+        import_conf = import_conf() if callable(import_conf) else import_conf
 
         assert import_conf.get("source"), "No source specified to import from"
 
@@ -746,10 +754,10 @@ class Importable:
                 updated,
                 cursor=cursor,
                 removed=removed,
-                import_conf=_importConfName,
+                import_conf_name=import_conf_name,
                 follow=follow,
-                _queue="import",
                 delete_filter=delete_filter,
+                _queue="import",
                 **kwargs,
             )
             return
