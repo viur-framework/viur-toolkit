@@ -92,8 +92,19 @@ class Importable:
         "enforce": False,  # Enforce all full skeletons to be rewritten.
         "skip": lambda values: False,  # don't skip any entry by default
         "inform": False,  # either an e-mail address to inform, or True for current user, False otherwise.
+        "clear": True,  # Do do_clear and delete not imported entries
     }
     _bone_translation_table = None  # the final translation table once created by create_config()
+
+    def modify_skel_key(
+        self,
+        key: db.Key,
+        skel: SkeletonInstance,
+        values: dict[str, t.Any],
+        translate: dict[str, str | t.Callable],
+        source_key: str,
+    ) -> db.Key:
+        return key
 
     @staticmethod
     def translate_key(skel, bone, value, **_):
@@ -336,7 +347,7 @@ class Importable:
             imp.logout()  # log-out now, as we're finished reading
 
             # Clear deleted entries?
-            if "importdate" in skel:
+            if import_conf.get("clear", True) and "importdate" in skel:
                 self.do_clear(
                     importdate,
                     inform,

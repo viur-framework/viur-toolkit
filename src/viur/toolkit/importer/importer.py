@@ -685,6 +685,7 @@ class Importer(requests.Session):
         update: bool = True,
         enforce: bool = False,
         debug: bool = False,
+        module: "Importable" = None,
     ):
         # assert isinstance(skel, skeleton.BaseSkeleton), "'skel' must be a BaseSkeleton instance"
         assert source_key in values, f"'{source_key}' not in values"
@@ -698,6 +699,9 @@ class Importer(requests.Session):
             key = db.keyHelper(values[source_key], skel.kindName)
 
         key = db.Key(skel.kindName, key.id_or_name)
+
+        if module is not None:
+            key = module.modify_skel_key(key, skel, values, translate, source_key)
 
         success = skel.fromDB(key)
 
