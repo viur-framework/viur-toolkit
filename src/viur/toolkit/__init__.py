@@ -5,7 +5,7 @@ from .checks import *
 from .context import *
 from .db import *
 from .decorators import *
-# TODO: needs reimplementation from .report import *
+from .report import *
 from .helpers import *
 from .importer import *
 from .memcache import *
