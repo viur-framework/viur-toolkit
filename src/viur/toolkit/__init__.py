@@ -7,6 +7,7 @@ from .db import *
 from .decorators import *
 # TODO: needs reimplementation from .report import *
 from .helpers import *
+from .importer import *
 from .memcache import *
 from .numeric import *
 from .property import *
