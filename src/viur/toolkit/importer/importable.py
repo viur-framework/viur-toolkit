@@ -475,11 +475,12 @@ class Importable:
         import_conf = import_conf() if callable(import_conf) else import_conf
 
         importdate = utils.utcNow()
+        source = import_conf.get("source") or {}
 
         # Login
         try:
             imp = Importer(
-                source=import_conf.get("source") or {},
+                source=source,
                 render=import_conf.get("render", "vi")
             )
 
@@ -498,8 +499,8 @@ class Importable:
 
         key = _AppKey(kindName, key.id_or_name)
 
-        project_id = import_conf.get("project_id")
-        assert project_id, f"Please set the project_id of portal {import_conf.get('url')}"
+        project_id = source.get("project_id")
+        assert project_id, f"Please set the project_id of portal {source.get('url')}"
         key = key.to_legacy_urlsafe(project_id=project_id).decode("utf-8")
 
         if not module:
