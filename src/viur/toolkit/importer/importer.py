@@ -219,7 +219,7 @@ class Importer(requests.Session):
 
         file_skel_cls = skeleton.skeletonByKind("file")
         if "import_key" in dir(file_skel_cls):
-            logger.debug(f"[importFile] Looking for {info["key"]}")
+            logger.debug(f'[importFile] Looking for {info["key"]}')
 
             if file_skel := file_skel_cls().all().filter("import_key =", info["key"]).getSkel():
                 logger.debug(f"[importFile] File {info} already imported as {file_skel}")
