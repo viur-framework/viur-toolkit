@@ -13,7 +13,10 @@ import typing as t
 
 import requests
 
-from viur.core import bones, conf, current, db, skeleton, utils
+from viur.core import bones, conf, db, skeleton, utils
+
+if t.TYPE_CHECKING:
+    from .importable import Importable
 
 NIL: t.Final = object()
 
@@ -23,6 +26,8 @@ logger = logging.getLogger(__name__)
 class Importer(requests.Session):
 
     def __init__(self, source: dict, render="vi", cookies=None):
+        from .. import get_task_retry_count
+
         super().__init__()
 
         url = source["url"]
@@ -37,16 +42,8 @@ class Importer(requests.Session):
         if cookies:
             logger.info(f"Using existing session cookies {cookies.keys()}")
             self.cookies.update(cookies)
-            return
 
-            try:
-                retry_count = int(current.request.get().request.headers.get("X-Appengine-Taskretrycount", -1))
-
-            except AttributeError:
-                # During warmup current.request is None (at least on local devserver)
-                retry_count = -1
-
-            if retry_count > 1 and self.get("/user/view/self").status_code == 401:
+            if get_task_retry_count() > 1 and self.get("/user/view/self").status_code == 401:
                 logger.warning("Got 401, session seems to be expired, Re-Login")
                 self.cookies.clear()
             else:
@@ -66,7 +63,7 @@ class Importer(requests.Session):
                 assert "." in module
                 module, key = module.split(".", 1)
 
-                mod = getattr(conf.main_app.vi, module)  # fixme: viur-core 3.7 Remove vi when possibel!
+                mod = getattr(conf.main_app.vi, module)  # fixme: viur-core 3.7 Remove vi when possible!
                 mod = db.Get(db.Key(mod.viewSkel().kindName, mod.getKey()))
                 self.key = mod[key]
             else:
@@ -436,7 +433,7 @@ class Importer(requests.Session):
 
                 if bone.languages:
                     skel[bone_name] = {lang: [] if bone.multiple else None
-                                      for lang in bone.languages}
+                                       for lang in bone.languages}
                 else:
                     skel[bone_name] = [] if bone.multiple else None
 
