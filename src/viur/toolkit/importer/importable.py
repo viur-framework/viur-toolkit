@@ -6,6 +6,7 @@ and and hookable interface for executing imports, partly automatically.
 import base64
 import logging
 import time
+import types
 import typing as t
 
 from google.cloud.datastore import _app_engine_key_pb2
@@ -792,3 +793,10 @@ class Importable:
 
         if follow:
             self._kickoff_follow(importdate, inform, **kwargs)
+
+    # types from viur-core prototypes
+
+    moduleName: str
+    onAdded: types.MethodType
+    onEdited: types.MethodType
+    onDeleted: types.MethodType

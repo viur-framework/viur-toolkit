@@ -10,6 +10,7 @@ Deprecated = "~=1.2"
 build="*"
 pycodestyle = "*"
 twine="*"
+mypy = "*"
 
 [requires]
 python_version = "3"
