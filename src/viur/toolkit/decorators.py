@@ -67,7 +67,7 @@ def as_json_response(
         return outer_wrapper  # @as_json_response() or @as_json_response(**any_kwargs)
 
 
-asJsonResponse = deprecated.deprecated(as_json_response())
+asJsonResponse = deprecated.deprecated(as_json_response)
 
 
 class ParseFunc(t.Protocol):
