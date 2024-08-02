@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class Importer(requests.Session):
 
-    def __init__(self, source: dict, render: str = "vi", cookies: dict|None = None):
+    def __init__(self, source: dict, render: str = "vi", cookies: dict | None = None):
         from .. import get_task_retry_count
 
         super().__init__()
@@ -85,7 +85,7 @@ class Importer(requests.Session):
     def skey(self) -> str:
         return self.get("/skey", timeout=30).json()
 
-    def get(self, url: str, *args: t.Any, **kwargs:t.Any) -> Response: #type: ignore[override]
+    def get(self, url: str, *args: t.Any, **kwargs: t.Any) -> Response:  # type: ignore[override]
         if url.startswith("/"):
             url = url[1:]
 
@@ -99,7 +99,7 @@ class Importer(requests.Session):
 
         return super().get("/".join([self.host, self.render, url]), *args, **kwargs)
 
-    def post(self,  url: str, *args: t.Any, **kwargs:t.Any) -> Response: #type: ignore[override]
+    def post(self, url: str, *args: t.Any, **kwargs: t.Any) -> Response:  # type: ignore[override]
         if url.startswith("/"):
             url = url[1:]
 
@@ -135,7 +135,8 @@ class Importer(requests.Session):
                         res = answ.json()
                     except (json.decoder.JSONDecodeError, requests.exceptions.JSONDecodeError):
                         try:
-                            res = json.loads(re.search(r"JSON\(\((.*)\)\)", answ.text).group(1)) # type:ignore[union-attr]
+                            res = json.loads(
+                                re.search(r"JSON\(\((.*)\)\)", answ.text).group(1))  # type:ignore[union-attr]
                         except Exception:
                             res = None
 
@@ -155,7 +156,7 @@ class Importer(requests.Session):
         logger.debug(f"HELLO {self.host}")
         return True
 
-    def list(self, module:str, **kwargs: t.Any) -> dict[str, t.Any] | None:
+    def list(self, module: str, **kwargs: t.Any) -> dict[str, t.Any] | None:
         req = self.get(f"/{module}/list", params=kwargs, timeout=60)
 
         if not req.status_code == 200:
@@ -164,7 +165,7 @@ class Importer(requests.Session):
 
         return req.json()
 
-    def flatlist(self,  module:str, **kwargs: t.Any) -> dict[str, t.Any] | None:
+    def flatlist(self, module: str, **kwargs: t.Any) -> dict[str, t.Any] | None:
         req = self.get(f"/{module}/listentries", params=kwargs, timeout=60)
 
         if not req.status_code == 200:
@@ -300,7 +301,7 @@ class Importer(requests.Session):
             if debug:
                 logger.debug(f"{bone_name} knownFiles = {knownFiles!r}")
 
-            def handle_entries(changes: int, value: t.Any, lang: str|None=None) -> int:
+            def handle_entries(changes: int, value: t.Any, lang: str | None = None) -> int:
                 for entry in value:
                     # fixme: not sure why, but while importing fluidpagecontent files, some entries where None... skipping
                     if not entry:
@@ -419,7 +420,7 @@ class Importer(requests.Session):
                     logger.error(f"Unable to set bone {bone_name} to {key}")
 
         elif isinstance(bone, bones.RecordBone):
-            def set_value(val: t.Any, lang: str|None) -> None:
+            def set_value(val: t.Any, lang: str | None) -> None:
                 nonlocal bone_value, changes, key
 
                 if isinstance(val, (dict, str, db.Key)):
@@ -570,7 +571,7 @@ class Importer(requests.Session):
         self,
         skel: skeleton.SkeletonInstance,
         values: dict[str, t.Any],
-        translate: dict[str, str| t.Callable] | None=None,
+        translate: dict[str, str | t.Callable] | None = None,
         debug: bool = False,
     ) -> int:
         changes = 0
