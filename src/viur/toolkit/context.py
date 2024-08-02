@@ -1,6 +1,7 @@
 import logging
 import time
 import typing as t
+from types import TracebackType
 
 from viur.core import current
 
@@ -22,8 +23,14 @@ class LanguageContext:
         current.language.set(self.lang)
         return self
 
-    def __exit__(self, exception, value, tb):
+    def __exit__(
+        self,
+        exc_type: t.Optional[t.Type[BaseException]],
+        exc_val: t.Optional[BaseException],
+        exc_tb: t.Optional[TracebackType],
+    ) -> t.Literal[False]:
         current.language.set(self.orig_lang)
+        return False
 
 
 class TimeMe:
@@ -38,6 +45,12 @@ class TimeMe:
         self.start = time.perf_counter()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: t.Optional[t.Type[BaseException]],
+        exc_val: t.Optional[BaseException],
+        exc_tb: t.Optional[TracebackType],
+    ) -> t.Literal[False]:
         self.end = time.perf_counter()
         logging.debug("%s took %.4fs", self.name, self.end - self.start)
+        return False

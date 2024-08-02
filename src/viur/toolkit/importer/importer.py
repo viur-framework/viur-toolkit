@@ -684,7 +684,7 @@ class Importer(requests.Session):
         update: bool = True,
         enforce: bool = False,
         debug: bool = False,
-        module: "Importable" = None,
+        module: t.Optional["Importable"] = None,
     ):
         # assert isinstance(skel, skeleton.BaseSkeleton), "'skel' must be a BaseSkeleton instance"
         assert source_key in values, f"'{source_key}' not in values"

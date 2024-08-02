@@ -43,10 +43,10 @@ class MemcacheWrapper(t.Generic[Value, Args]):
         self,
         func: t.Callable[Args, Value],
         *,
-        name: str = None,
+        name: t.Optional[str] = None,
         args: Args.args = tuple(),
         cachetime: td | Seconds = td(hours=1),
-        namespace: str = None,
+        namespace: t.Optional[str] = None,
     ):
         """Initialize a new MemcacheWrapper instance.
 
