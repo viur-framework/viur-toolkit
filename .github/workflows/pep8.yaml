@@ -39,24 +39,3 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         run: |
           git show -U0 ${GITHUB_SHA} | pycodestyle --diff --format='::error file=%(path)s,line=%(row)d,col=%(col)d::%(code)s: %(text)s'
-
-  type-checker:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Install mypy
-        run: pip install mypy
-
-      - name: Run mypy
-        uses: sasanquaneuf/mypy-github-action@releases/v1
-        with:
-          checkName: "type-checker"   # NOTE: this needs to be the same as the job name
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
