@@ -8,11 +8,13 @@ import logging
 import time
 import types
 import typing as t
+from datetime import datetime as dt
 
 from google.cloud.datastore import _app_engine_key_pb2
 
 from viur.core import conf, current, db, email, errors, utils
 from viur.core.decorators import exposed
+from viur.core.prototypes.tree import SkelType
 from viur.core.skeleton import SkeletonInstance
 from viur.core.tasks import CallDeferred
 from .importer import Importer
@@ -33,13 +35,13 @@ JINJA_EMAIL_TEMPLATE = """{{ skel["targetportal"] }}.{{ skel["targetmodule"] }} 
 
 
 class _AppKey(db.Key):
-    def to_legacy_urlsafe(self, project_id=None) -> str:
+    def to_legacy_urlsafe(self, project_id: str | None = None) -> bytes:
         """
         Converts this key into the (urlsafe) protobuf string representation.
         :return: The urlsafe string representation of this key
         """
         currentKey = self
-        pathElements = []
+        pathElements: list[_app_engine_key_pb2.Path.Element] = []
         while currentKey:
             pathElements.insert(
                 0,
@@ -74,7 +76,7 @@ class Importable:
     """
 
     # !!!TODO!!! Should be turned into a class!
-    import_conf = {
+    import_conf: dict[str, t.Any] = {
         "source": {
             "url": None,  # this is mandatory!
             "auth": "viur",  # It can also be other sources used
@@ -96,7 +98,7 @@ class Importable:
         "inform": False,  # either an e-mail address to inform, or True for current user, False otherwise.
         "clear": True,  # Do do_clear and delete not imported entries
     }
-    _bone_translation_table = {}  # the final translation table once created by create_config()
+    _bone_translation_table: dict[str, dict] = {}  # the final translation table once created by create_config()
 
     def modify_skel_key(
         self,
@@ -109,16 +111,16 @@ class Importable:
         return key
 
     @staticmethod
-    def translate_key(skel, bone, value, **_):
+    def translate_key(skel: SkeletonInstance, bone: str, value: t.Any, **_: t.Any) -> int:
         """
-        Helper function to replace a key during translation, even if its not a keyBone.
+        Helper function to replace a key during translation, even if it's not a keyBone.
         """
         if not value:
             return 0
         try:
             key = db.Key.from_legacy_urlsafe(value)
             assert not key.parent, "Not implemented"
-        except:
+        except Exception:
             logger.exception("Can't convert key")
             return 0
 
@@ -129,7 +131,7 @@ class Importable:
         return 0
 
     @staticmethod
-    def translate_select_values(skel, bone_name, value, matching):
+    def translate_select_values(skel: SkeletonInstance, bone_name: str, value: t.Any, matching: dict) -> int:
         """
         Helper to rewrite select values from a given matching table.
         """
@@ -156,12 +158,12 @@ class Importable:
 
         return changes
 
-    def get_handler(self):
+    def get_handler(self) -> str:
         admin_info = self.describe()
         assert (handler := admin_info.get("handler"))
         return handler.split(".", 1)[0]
 
-    def import_skel(self, skelType=None):
+    def import_skel(self, skelType: SkelType = None) -> SkeletonInstance:
         handler = self.get_handler()
 
         if handler == "tree":
@@ -180,11 +182,11 @@ class Importable:
         enforce: bool = False,
         inform: str = "false",
         dry_run: bool = False,
-        otp=None,
+        otp: str | None = None,
         debug: bool = False,
         import_conf_name: str = "import_conf",
-        **kwargs,
-    ):
+        **kwargs: t.Any,
+    ) -> str:
         cuser = current.user.get()
         if not cuser or "root" not in cuser["access"]:
             raise errors.Unauthorized()
@@ -233,22 +235,22 @@ class Importable:
     @CallDeferred
     def do_import(
         self,
-        importdate=None,
-        inform=None,
-        spawn=0,
-        cursor=None,
-        total=0,
-        updated=0,
-        follow=False,
-        enforce=False,
-        dry_run=False,
-        cookies=None,
-        source=None,
-        delete_filter=None,
+        importdate: dt | None = None,
+        inform: str | None = None,
+        spawn: int = 0,
+        cursor: str | None = None,
+        total: int = 0,
+        updated: int = 0,
+        follow: bool = False,
+        enforce: bool = False,
+        dry_run: bool = False,
+        cookies: dict | None = None,
+        source: dict | None = None,
+        delete_filter: dict | None = None,
         debug: bool = False,
         import_conf_name: str = "import_conf",
-        **kwargs,
-    ):
+        **kwargs: t.Any,
+    ) -> None | bool:
         import_conf = getattr(self, import_conf_name)
         import_conf = import_conf() if callable(import_conf) else import_conf
         assert import_conf.get("source"), "No source specified to import from"
@@ -262,7 +264,7 @@ class Importable:
 
         # Login
         imp = Importer(
-            import_conf.get("source") or {} | source or {},
+            (import_conf.get("source") or {}) | (source or {}),
             render=import_conf.get("render", "vi"),
             cookies=cookies,
         )
@@ -309,7 +311,7 @@ class Importable:
                 import_conf.get("module", self.moduleName),
             )
             self._kickoff_follow(importdate, inform, import_conf_name=import_conf_name, **kwargs)
-            return
+            return None
 
         # Get skeleton
         skel = self.import_skel(skelType=kwargs.get("skelType"))
@@ -318,10 +320,12 @@ class Importable:
 
         # Perform import
         if isinstance(answ, dict):
-            skellist = answ.get("skellist")
+            skellist = answ.get("skellist", [])
             cursor = answ.get("cursor")
         elif isinstance(answ, list):
             skellist = answ
+        else:
+            raise NotImplementedError(f"Cannot handle type {type(answ)}")
 
         for values in skellist:
             total += 1
@@ -368,7 +372,7 @@ class Importable:
                     _queue="import",
                     **kwargs,
                 )
-                return
+                return None
 
             logger.info(
                 "%s: Import finished; %d entries in total, %d updated",
@@ -468,10 +472,14 @@ class Importable:
         self._bone_translation_table[import_conf_name] = tr
 
     def do_import_entry(
-        self, key, module=None, kindName=None, skel_type="node",
+        self,
+        key: str,
+        module: str | None = None,
+        kindName: str | None = None,
+        skel_type: SkelType = "node",
         debug: bool = False,
         import_conf_name: str = "import_conf",
-    ):
+    ) -> bool | None:
         import_conf = getattr(self, import_conf_name)
         import_conf = import_conf() if callable(import_conf) else import_conf
 
@@ -487,7 +495,7 @@ class Importable:
 
         except Exception as e:
             logger.exception(e)
-            return
+            return None
 
         skel = self.import_skel(skelType=skel_type)
 
@@ -498,7 +506,7 @@ class Importable:
         if not kindName:
             kindName = import_conf.get("module")
 
-        key = _AppKey(kindName, key.id_or_name)
+        key = _AppKey(kindName, key.id_or_name)  # type: ignore[attr-defined]
 
         project_id = source.get("project_id")
         assert project_id, f"Please set the project_id of portal {source.get('url')}"
@@ -517,12 +525,13 @@ class Importable:
 
         try:
             answ = answ.json()
-        except:
+        except Exception:
             logger.warning(
                 "Target module %r does not exist in source or some other error occured - skipping",
                 import_conf.get("module", self.moduleName),
             )
-            return
+            return None
+        assert isinstance(answ, dict)
         values = answ["values"]
 
         return self._convert_entry(
@@ -539,17 +548,17 @@ class Importable:
 
     def _convert_entry(
         self,
-        imp,
-        skel,
-        values,
-        importdate,
-        skel_type=None,
-        enforce=False,
-        dry_run=False,
-        updateRelations=True,
+        imp: "Importer",
+        skel: SkeletonInstance,
+        values: dict[str, t.Any],
+        importdate: dt,
+        skel_type: SkelType = None,
+        enforce: bool = False,
+        dry_run: bool = False,
+        updateRelations: bool = True,
         debug: bool = False,
         import_conf_name: str = "import_conf",
-    ):
+    ) -> bool:
         """
         Internal function for converting one entry.
         """
@@ -624,16 +633,22 @@ class Importable:
                 assert skel.toDB(update_relations=True)
         return False
 
-    def onEntryChanged(self, skel, values):
+    def onEntryChanged(self, skel: SkeletonInstance, values: dict[str, t.Any]) -> bool:
         return True
 
-    def onEntryUnchanged(self, skel, values):
+    def onEntryUnchanged(self, skel: SkeletonInstance, values: dict[str, t.Any]) -> bool:
         return True
 
-    def onImportFinished(self, moduleName, total, updated, **kwargs):
+    def onImportFinished(self, moduleName: str, total: int, updated: int, **kwargs: t.Any) -> None:
         pass
 
-    def _kickoff_follow(self, importdate, inform, import_conf_name: str = "import_conf", **kwargs):
+    def _kickoff_follow(
+        self,
+        importdate: dt,
+        inform: str | None,
+        import_conf_name: str = "import_conf",
+        **kwargs: t.Any,
+    ) -> None:
         # Check if tree type and nodes where imported, then import the leafs first
         if (
             self.get_handler() == "tree"
@@ -660,18 +675,18 @@ class Importable:
     @CallDeferred
     def do_clear(
         self,
-        importdate,
-        inform,
-        total,
-        updated,
+        importdate: dt,
+        inform: str | None,
+        total: int,
+        updated: int,
         import_conf_name: str = "import_conf",
-        cursor=None,
-        removed=0,
-        follow=False,
-        dry_run=False,
-        delete_filter=None,
-        **kwargs,
-    ):
+        cursor: str | None = None,
+        removed: int = 0,
+        follow: bool = False,
+        dry_run: bool = False,
+        delete_filter: dict | None = None,
+        **kwargs: t.Any,
+    ) -> None:
         logger.info("do_clear")
         import_conf = getattr(self, import_conf_name)
         import_conf = import_conf() if callable(import_conf) else import_conf
@@ -800,3 +815,5 @@ class Importable:
     onAdded: types.MethodType
     onEdited: types.MethodType
     onDeleted: types.MethodType
+    describe: types.MethodType
+    editSkel: types.MethodType

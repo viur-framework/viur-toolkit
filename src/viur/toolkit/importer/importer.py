@@ -12,6 +12,7 @@ import re
 import typing as t
 
 import requests
+from requests import Response
 
 from viur.core import bones, conf, db, skeleton, utils
 
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class Importer(requests.Session):
 
-    def __init__(self, source: dict, render="vi", cookies=None):
+    def __init__(self, source: dict, render: str = "vi", cookies: dict|None = None):
         from .. import get_task_retry_count
 
         super().__init__()
@@ -77,14 +78,14 @@ class Importer(requests.Session):
         if self.method and not self.login():
             raise IOError(f"Unable to logon to '{self.host}'")
 
-    def logout(self):
+    def logout(self) -> t.Any:
         if self.method != "secretkey":
             return self.get("/user/logout", params={"skey": self.skey()}, timeout=30).json()
 
-    def skey(self):
+    def skey(self) -> str:
         return self.get("/skey", timeout=30).json()
 
-    def get(self, url, *args, **kwargs):
+    def get(self, url: str, *args: t.Any, **kwargs:t.Any) -> Response: #type: ignore[override]
         if url.startswith("/"):
             url = url[1:]
 
@@ -98,7 +99,7 @@ class Importer(requests.Session):
 
         return super().get("/".join([self.host, self.render, url]), *args, **kwargs)
 
-    def post(self, url, *args, **kwargs):
+    def post(self,  url: str, *args: t.Any, **kwargs:t.Any) -> Response: #type: ignore[override]
         if url.startswith("/"):
             url = url[1:]
 
@@ -112,7 +113,7 @@ class Importer(requests.Session):
 
         return super().post("/".join([self.host, self.render, url]), *args, **kwargs)
 
-    def login(self):
+    def login(self) -> bool:
         if self.method == "secretkey":
             logger.debug(f"{self.method=} requires no login")
         else:
@@ -134,7 +135,7 @@ class Importer(requests.Session):
                         res = answ.json()
                     except (json.decoder.JSONDecodeError, requests.exceptions.JSONDecodeError):
                         try:
-                            res = json.loads(re.search(r"JSON\(\((.*)\)\)", answ.text).group(1))
+                            res = json.loads(re.search(r"JSON\(\((.*)\)\)", answ.text).group(1)) # type:ignore[union-attr]
                         except Exception:
                             res = None
 
@@ -154,7 +155,7 @@ class Importer(requests.Session):
         logger.debug(f"HELLO {self.host}")
         return True
 
-    def list(self, module, *args, **kwargs):
+    def list(self, module:str, **kwargs: t.Any) -> dict[str, t.Any] | None:
         req = self.get(f"/{module}/list", params=kwargs, timeout=60)
 
         if not req.status_code == 200:
@@ -163,7 +164,7 @@ class Importer(requests.Session):
 
         return req.json()
 
-    def flatlist(self, module, *args, **kwargs):
+    def flatlist(self,  module:str, **kwargs: t.Any) -> dict[str, t.Any] | None:
         req = self.get(f"/{module}/listentries", params=kwargs, timeout=60)
 
         if not req.status_code == 200:
@@ -172,7 +173,7 @@ class Importer(requests.Session):
 
         return req.json()
 
-    def flatten_relational_data(self, bone_name, data):
+    def flatten_relational_data(self, bone_name: str, data: t.Any) -> dict[str, t.Any]:
         ret = {}
         if isinstance(data, list) or isinstance(data, dict):
             if isinstance(data, dict):
@@ -187,7 +188,7 @@ class Importer(requests.Session):
             ret[bone_name] = data
         return ret
 
-    def view(self, module, key):
+    def view(self, module: str, key: str) -> dict[str, t.Any] | None:
         req = self.get(f"/{module}/view/{key}", timeout=10)
 
         if not req.status_code == 200:
@@ -196,7 +197,7 @@ class Importer(requests.Session):
 
         return req.json()
 
-    def import_file(self, info):
+    def import_file(self, info: dict[str, t.Any]) -> None | db.Key:
         assert "dlkey" in info and "name" in info
 
         name = info["name"]
@@ -254,7 +255,7 @@ class Importer(requests.Session):
 
         return conf.main_app.file.write(name, content, mimetype)
 
-    def set_skel_value(self, skel: skeleton.SkeletonInstance, bone_name: str, value: t.Any, debug: bool = False):
+    def set_skel_value(self, skel: skeleton.SkeletonInstance, bone_name: str, value: t.Any, debug: bool = False) -> int:
         # FIXME: This method is a total mess up of bone types and nested structure.
         #        It needs a complete refactoring (split into methods), should use more bone methods
         #        and a more robust behaviour against invalid bone data
@@ -299,7 +300,7 @@ class Importer(requests.Session):
             if debug:
                 logger.debug(f"{bone_name} knownFiles = {knownFiles!r}")
 
-            def handle_entries(changes, value, lang=None):
+            def handle_entries(changes: int, value: t.Any, lang: str|None=None) -> int:
                 for entry in value:
                     # fixme: not sure why, but while importing fluidpagecontent files, some entries where None... skipping
                     if not entry:
@@ -418,7 +419,7 @@ class Importer(requests.Session):
                     logger.error(f"Unable to set bone {bone_name} to {key}")
 
         elif isinstance(bone, bones.RecordBone):
-            def set_value(val, lang):
+            def set_value(val: t.Any, lang: str|None) -> None:
                 nonlocal bone_value, changes, key
 
                 if isinstance(val, (dict, str, db.Key)):
@@ -565,7 +566,13 @@ class Importer(requests.Session):
 
         return changes
 
-    def translate(self, skel: skeleton.SkeletonInstance, values, translate=None, debug: bool = False):
+    def translate(
+        self,
+        skel: skeleton.SkeletonInstance,
+        values: dict[str, t.Any],
+        translate: dict[str, str| t.Callable] | None=None,
+        debug: bool = False,
+    ) -> int:
         changes = 0
 
         if translate is None:
@@ -685,7 +692,7 @@ class Importer(requests.Session):
         enforce: bool = False,
         debug: bool = False,
         module: t.Optional["Importable"] = None,
-    ):
+    ) -> int:
         # assert isinstance(skel, skeleton.BaseSkeleton), "'skel' must be a BaseSkeleton instance"
         assert source_key in values, f"'{source_key}' not in values"
 
