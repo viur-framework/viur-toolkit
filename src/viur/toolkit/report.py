@@ -4,6 +4,7 @@ import json
 import logging
 import typing as t
 from datetime import datetime as dt
+from types import TracebackType
 
 from google.cloud.storage import Bucket
 
@@ -67,7 +68,7 @@ class Report:
         self.content = content
         self.columns = set(columns)
 
-    def write(self, **value) -> None:
+    def write(self, **value: t.Any) -> None:
         value["reportdate"] = dt.now().isoformat(" ", "seconds")
         self.content.append(value)
         self.columns.update(value.keys())
@@ -160,5 +161,11 @@ class Report:
         self._read()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: t.Optional[t.Type[BaseException]],
+        exc_val: t.Optional[BaseException],
+        exc_tb: t.Optional[TracebackType],
+    ) -> t.Literal[False]:
         self.flush()
+        return False
