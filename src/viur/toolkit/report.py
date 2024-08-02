@@ -61,10 +61,9 @@ class Report:
             if raise_exc:
                 raise ValueError(f"GSC blob {self.gsc_name} not found")
             return None
-        content: list[list[str] | dict[str, t.Any]] = json.loads(
+        columns, content = json.loads(
             blob.download_as_bytes().decode("utf-8")
         )
-        columns = content.pop(0)
         self.content = content
         self.columns = set(columns)
 
@@ -77,8 +76,7 @@ class Report:
     def flush(self) -> None:
         if not self.changed:
             return
-        value: list[list[str] | dict[str, t.Any]] = self.content[:]
-        value.insert(0, list(self.columns))
+        value = (list(self.columns), self.content[:])
         GOOGLE_STORAGE_BUCKET.blob(self.gsc_name).upload_from_file(
             file_obj=io.BytesIO(json.dumps(value).encode()),
             content_type="application/json"
