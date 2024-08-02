@@ -1,6 +1,47 @@
 [build-system]
 requires = [
     "setuptools>=65",
-    "wheel"
+#    "wheel"
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "viur-toolkit"
+dynamic = ["version"]
+dependencies = [
+    "requests",
+    "Deprecated",
+    "viur-core>=3.6",
+]
+requires-python = ">=3.10"
+authors = [
+    { name = "Sven Eberth", email = "se@mausbrand.de" },
+]
+maintainers = [
+    { name = "Sven Eberth", email = "se@mausbrand.de" },
+]
+description = "A kit of helpers and tools to simplify more intensive use of ViUR"
+readme = "README.md"
+license = { file = "LICENSE" }
+keywords = ["viur", "plugin", "backend", "toolkit"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "viur.toolkit.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+#TODO: Documentation = "https://viur-toolkit.readthedocs.io"
+Repository = "https://github.com/viur-framework/viur-toolkit.git"
+"Bug Tracker" = "https://github.com/viur-framework/viur-toolkit/issues"
+#TODO: Changelog = "https://github.com/viur-framework/viur-toolkit/blob/main/CHANGELOG.md"
