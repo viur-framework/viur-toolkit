@@ -19,7 +19,7 @@ class CachedProperty(t.Generic[Value, Args]):
         self,
         lifetime: td | Seconds,
         func: t.Callable[Args, Value],
-        args: Args | None = None,
+        args: Args.args | None = None,
     ):
         """Initiate a new CachedProperty
 
@@ -34,9 +34,9 @@ class CachedProperty(t.Generic[Value, Args]):
         super(CachedProperty, self).__init__()
         self.lifetime: td = utils.parse.timedelta(lifetime)
         self.func = func
-        self.args = tuple() if args is None else args
-        self._value = None
-        self._lifetime_ends = None
+        self.args: Args.args = tuple() if args is None else args
+        self._value: Value | None = None
+        self._lifetime_ends: dt | None = None
 
     def get(self) -> Value:
         """Return the value of Property.
