@@ -1,11 +1,10 @@
 import logging
-import pickle
 import typing as t  # noqa
-from collections import namedtuple
 from datetime import datetime as dt, timedelta as td, timezone as tz  # noqa
 
 from google.appengine.api.memcache import Client
 from google.appengine.ext.testbed import Testbed
+
 from viur.core import conf, utils
 
 __all__ = [
@@ -28,34 +27,7 @@ if conf.instance.is_dev_server:
     testbed.activate()
     testbed.init_memcache_stub()
 
-memcache = Client()
-
-MemcacheElement = namedtuple("MemcacheElement", ("data", "expires"))
-
-
-class MemcacheDummy:
-    def __init__(self):
-        super().__init__()
-        self.data = {}
-
-    def get(self, name, namespace="default", *args, **kwargs):
-        # logger.debug(f"memcache: {self.data = }")
-        if (res := self.data.setdefault(namespace, {}).get(name)) and utils.utcNow() <= res.expires:
-            return pickle.loads(res.data)
-        return None
-
-    def set(self, name, value, time=td(days=30), namespace="default", *args, **kwargs):
-        time = utils.parse.timedelta(time)
-        expires = utils.utcNow() + time
-        value = pickle.dumps(value)
-        self.data.setdefault(namespace, {})[name] = MemcacheElement(value, expires)
-        # logger.debug(f"memcache: {self.data = }")
-
-    def delete(self, name, namespace="default", *args, **kwargs):
-        return self.data.setdefault(namespace, {}).pop(name, None)
-
-
-# memcache = MemcacheDummy()
+memcache: t.Final = Client()
 
 
 class MemcacheWrapper(t.Generic[Value, Args]):
