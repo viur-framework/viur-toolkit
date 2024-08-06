@@ -85,7 +85,7 @@ class Importer(requests.Session):
     def skey(self) -> str:
         return self.get("/skey", timeout=30).json()
 
-    def get(self, url: str, *args: t.Any, **kwargs: t.Any) -> Response:
+    def get(self, url: str, *args: t.Any, **kwargs: t.Any) -> Response:  # type: ignore[override]
         if url.startswith("/"):
             url = url[1:]
 
@@ -99,7 +99,7 @@ class Importer(requests.Session):
 
         return super().get("/".join([self.host, self.render, url]), *args, **kwargs)
 
-    def post(self, url: str, *args: t.Any, **kwargs: t.Any) -> Response:
+    def post(self, url: str, *args: t.Any, **kwargs: t.Any) -> Response:  # type: ignore[override]
         if url.startswith("/"):
             url = url[1:]
 

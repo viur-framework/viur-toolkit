@@ -47,7 +47,6 @@ Repository = "https://github.com/viur-framework/viur-toolkit.git"
 #TODO: Changelog = "https://github.com/viur-framework/viur-toolkit/blob/main/CHANGELOG.md"
 
 [tool.mypy]
-disable_error_code = "import-untyped"
 exclude = [
     "build/"
 ]
