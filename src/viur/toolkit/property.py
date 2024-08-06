@@ -19,7 +19,7 @@ class CachedProperty(t.Generic[Value, Args]):
         self,
         lifetime: td | Seconds,
         func: t.Callable[Args, Value],
-        args: Args.args | None = None,
+        args: t.Optional[Args.args] = None,
     ):
         """Initiate a new CachedProperty
 
