@@ -10,7 +10,10 @@ Deprecated = "~=1.2"
 build="*"
 pycodestyle = "*"
 twine="*"
-mypy = "*"
+mypy = "~=1.11"
+# mypy types
+types-Deprecated = "*"
+types-requests = "*"
 
 [requires]
 python_version = "3"
@@ -22,3 +25,4 @@ build = "python -m build"
 release = "python -m twine upload dist/*"
 release_test = "python -m twine upload --repository testpypi dist/*"
 pep8check = "bash -c \"git diff -U0 | pycodestyle --diff --show-source\""
+lint = "bash -c \"mypy .\""
