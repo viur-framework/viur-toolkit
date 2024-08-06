@@ -22,8 +22,8 @@ pipenv install --dev
 
 ### Code linting & type checking
 
-And use the `type_check` command
+And use the `lint` command
 ```sh
 $ pipenv run lint
 ```
-runs `pep8check` and `type_check`.
+tu run `pep8check` and `type_check` at once.
