@@ -11,3 +11,19 @@
     <br>
     A kit of helpers and tools to simplify more intensive use of ViUR
 </div>
+
+
+## Development
+
+### Setup the local environment with pipenv:
+```sh
+pipenv install --dev
+```
+
+### Code linting & type checking
+
+And use the `lint` command
+```sh
+$ pipenv run lint
+```
+tu run `pep8check` and `type_check` at once.

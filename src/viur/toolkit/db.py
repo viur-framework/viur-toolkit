@@ -1,7 +1,8 @@
 import logging
 import time
 import typing as t
-from viur.core import db, skeleton, bones
+
+from viur.core import bones, db, skeleton
 
 __all__ = [
     "normalize_key",
@@ -23,8 +24,8 @@ def normalize_key(key: _KeyType) -> db.Key:
     raise TypeError(f"Expected key of type str or db.Key, got: {type(key)}")
 
 
-def write_in_transaction(key: _KeyType, create_missing_entity: bool = True, **values):
-    def txn(_key, _values):
+def write_in_transaction(key: _KeyType, create_missing_entity: bool = True, **values: t.Any) -> db.Entity:
+    def txn(_key: db.Key, _values: dict[str, t.Any]) -> db.Entity:
         try:
             entity = db.Get(_key)
         except db.NotFoundError:
@@ -41,7 +42,7 @@ def write_in_transaction(key: _KeyType, create_missing_entity: bool = True, **va
 
 
 def increase_counter(key: _KeyType, name: str, value: float | int = 1, start: float | int = 0) -> int | float:
-    def txn(_key, _name, _value, _start):
+    def txn(_key: db.Key, _name: str, _value: float | int, _start: float | int) -> float | int:
         try:
             entity = db.Get(_key)
         except db.NotFoundError:
@@ -64,7 +65,7 @@ def set_status(
     values: dict | t.Callable[[skeleton.SkeletonInstance | db.Entity], None],
     precondition: t.Optional[dict | t.Callable[[skeleton.SkeletonInstance | db.Entity], None]] = None,
     create: dict[str, t.Any] | t.Callable[[skeleton.SkeletonInstance | db.Entity], None] | bool = False,
-    skel: skeleton.SkeletonInstance = None,
+    skel: t.Optional[skeleton.SkeletonInstance] = None,
     update_relations: bool = False,
     retry: int = 1,
 ) -> skeleton.SkeletonInstance | db.Entity:
@@ -85,7 +86,7 @@ def set_status(
     """
 
     # Transactional function
-    def transaction():
+    def transaction() -> skeleton.SkeletonInstance | db.Entity:
         exists = True
 
         # Use skel or db.Entity

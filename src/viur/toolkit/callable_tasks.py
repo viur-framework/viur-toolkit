@@ -59,7 +59,7 @@ class BuildDerivationsDispatcher(CallableTaskBase):
             self._run(module, notify)
 
     @staticmethod
-    def _run(module: str, notify: str) -> None:
+    def _run(module: str, notify: str | None) -> None:
         skel_cls = skeletonByKind(module)
         if not skel_cls:
             logger.error(f"{BuildDerivationsDispatcher.__name__}: Invalid {module=}")
@@ -81,7 +81,7 @@ class BuildDerivations(QueryIter):
     def _bone_ensure_derived(cls, skel: SkeletonInstance, bone_instance: FileBone, bone_name: str) -> None:
         """Logic from FileBone.postSavedHandler"""
 
-        def handleDerives(values) -> None:
+        def handleDerives(values: dict | list) -> None:
             if isinstance(values, dict):
                 values = [values]
             for val in values:  # Ensure derives getting build for each file referenced in this relation

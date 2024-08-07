@@ -45,3 +45,12 @@ where = ["src"]
 Repository = "https://github.com/viur-framework/viur-toolkit.git"
 "Bug Tracker" = "https://github.com/viur-framework/viur-toolkit/issues"
 #TODO: Changelog = "https://github.com/viur-framework/viur-toolkit/blob/main/CHANGELOG.md"
+
+[tool.mypy]
+exclude = [
+    "build/"
+]
+ignore_missing_imports = true
+disallow_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
