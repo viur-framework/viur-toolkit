@@ -1,5 +1,3 @@
-# viur-toolkit
-
 <div align="center">
     <h1>viur-toolkit</h1>
     <a href="https://pypi.org/project/viur-toolkit/">
