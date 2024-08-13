@@ -99,8 +99,8 @@ class Importable:
         "clear": True,  # Do do_clear and delete not imported entries
     }
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
+        super().__init__(*args, **kwargs)
         self._bone_translation_table: dict[str, dict] = {}
         """the final translation table once created by create_config()"""
 
