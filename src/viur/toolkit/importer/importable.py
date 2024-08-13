@@ -98,7 +98,11 @@ class Importable:
         "inform": False,  # either an e-mail address to inform, or True for current user, False otherwise.
         "clear": True,  # Do do_clear and delete not imported entries
     }
-    _bone_translation_table: dict[str, dict] = {}  # the final translation table once created by create_config()
+
+    def __init__(self):
+        super().__init__()
+        self._bone_translation_table: dict[str, dict] = {}
+        """the final translation table once created by create_config()"""
 
     def modify_skel_key(
         self,
