@@ -19,9 +19,15 @@ from viur.core import bones, conf, db, skeleton, utils
 if t.TYPE_CHECKING:
     from .importable import Importable
 
-NIL: t.Final = object()
-
 logger = logging.getLogger(__name__)
+
+
+class Nil:
+    def __repr__(self) -> str:
+        return "<NIL>"
+
+
+NIL: t.Final = Nil()
 
 
 class Importer(requests.Session):
