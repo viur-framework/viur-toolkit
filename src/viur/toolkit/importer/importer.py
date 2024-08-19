@@ -204,7 +204,7 @@ class Importer(requests.Session):
         name = info["name"]
         dlkey = info["dlkey"]
         servingurl = info.get("servingurl")
-        size = info["size"]
+        size = info.get("size", -1)
 
         if not isinstance(size, int):
             try:
@@ -217,6 +217,8 @@ class Importer(requests.Session):
             logger.error("Download skipped, because its larger than 200mb")
             logger.error(info)
             return None
+        elif size == -1:
+            logger.warning(f"size is missing in {info=}")
 
         file_skel_cls = skeleton.skeletonByKind("file")
         if "import_key" in dir(file_skel_cls):
