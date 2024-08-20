@@ -264,7 +264,7 @@ class Importable:
         if importdate is None:
             importdate = utils.utcNow().replace(microsecond=0)  # need to remove microseconds!!!
 
-        logger.debug(f"{self.moduleName!r} {importdate=} {total=}")
+        logger.debug(f"do_import {self.moduleName!r} {importdate=} {total=}")
 
         # Login
         imp = Importer(
@@ -331,33 +331,41 @@ class Importable:
         else:
             raise NotImplementedError(f"Cannot handle type {type(answ)}")
 
-        for values in skellist:
+        for idx, values in enumerate(skellist, 1):
             total += 1
 
             if "skip" in import_conf and import_conf["skip"](values):
                 continue
 
             # logger.debug(f"{values=}")
-
-            if self._convert_entry(
-                imp,
-                skel,
-                values,
-                importdate,
-                skel_type=kwargs.get("skelType"),
-                enforce=enforce,
-                dry_run=dry_run,
-                updateRelations=import_conf.get("update_relations", True),
-                debug=debug,
-                import_conf_name=import_conf_name,
-            ):
-                updated += 1
+            logger.debug(f"do_import of {self.moduleName=} :: {total=} | {idx=}")
+            try:
+                if self._convert_entry(
+                    imp,
+                    skel,
+                    values,
+                    importdate,
+                    skel_type=kwargs.get("skelType"),
+                    enforce=enforce,
+                    dry_run=dry_run,
+                    updateRelations=import_conf.get("update_relations", True),
+                    debug=debug,
+                    import_conf_name=import_conf_name,
+                ):
+                    updated += 1
+            except Exception as e:
+                logger.error(f"do_import of {self.moduleName=} :: Failed on {idx=}")
+                logger.exception(e)
+                e.add_note(f"do_import {self.moduleName=} :: {idx=}")
+                raise
+            else:
+                logger.debug(f"do_import of {self.moduleName=} :: {total=} | {idx=} DONE")
 
                 # if total >= 5:
                 #    skellist = ()
                 #    break
 
-        logger.info("%s: %d entries imported, %d entries updated", self.moduleName, total, updated)
+        logger.info("do_import %s: %d entries imported, %d entries updated", self.moduleName, total, updated)
 
         if not skellist or cursor is None:
             imp.logout()  # log-out now, as we're finished reading
