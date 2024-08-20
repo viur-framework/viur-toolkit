@@ -204,7 +204,11 @@ class Importer(requests.Session):
         name = info["name"]
         dlkey = info["dlkey"]
         servingurl = info.get("servingurl")
-        size = info["size"]
+        try:
+            size = info["size"]
+        except KeyError:
+            logger.warning(f"size is missing in {info=}")
+            size = -1
 
         if not isinstance(size, int):
             try:
