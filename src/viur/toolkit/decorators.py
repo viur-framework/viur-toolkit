@@ -28,7 +28,7 @@ def debug(
     *,
     only_parameter: list[str] | tuple[str] | None = None,
     exclude_parameter: list[str] | tuple[str] | None = None,
-) -> t.Callable[P, T]:
+) -> t.Callable[P, T] | functools.partial:
     """Decorator to print the function signature and return value.
 
     :param func: The function to decorate.
@@ -37,6 +37,15 @@ def debug(
     """
     if only_parameter is not None and exclude_parameter is not None:
         raise ValueError("only_kwargs and exclude_kwargs cannot be used together")
+
+    if func is None:
+        # Decorator is called, probably to provide arguments.
+        # Return the decorator again, but with bounded arguments.
+        return functools.partial(
+            debug,
+            only_parameter=only_parameter,
+            exclude_parameter=exclude_parameter,
+        )
 
     @functools.wraps(func)
     def wrapper_debug(*args: P.args, **kwargs: P.kwargs) -> T:
@@ -54,15 +63,6 @@ def debug(
         value = func(*args, **kwargs)
         logger.info(f"{func.__name__} RETURNED {value!r}")
         return value
-
-    if func is None:
-        # Decorator is called, probably to provide arguments.
-        # Return the decorator again, but with bounded arguments.
-        return functools.partial(
-            debug,
-            only_parameter=only_parameter,
-            exclude_parameter=exclude_parameter,
-        )
 
     return wrapper_debug
 
