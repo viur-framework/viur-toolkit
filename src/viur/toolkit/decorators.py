@@ -23,11 +23,11 @@ T = t.TypeVar("T")
 
 
 def debug(
-    func: t.Callable[P, T],
+    func: t.Callable[P, T] | None = None,
     /,
     *,
-    only_parameter: list[str] | None = None,
-    exclude_parameter: list[str] | None = None,
+    only_parameter: list[str] | tuple[str] | None = None,
+    exclude_parameter: list[str] | tuple[str] | None = None,
 ) -> t.Callable[P, T]:
     """Decorator to print the function signature and return value.
 
@@ -40,17 +40,29 @@ def debug(
 
     @functools.wraps(func)
     def wrapper_debug(*args: P.args, **kwargs: P.kwargs) -> T:
-        args_mapping = inspect.getcallargs(func, *args, **kwargs)
+        all_args_mapping = args_mapping = inspect.getcallargs(func, *args, **kwargs)
         if only_parameter is not None:
-            args_mapping = {k: v for k, v in args_mapping if k in only_parameter}
+            args_mapping = {k: v for k, v in all_args_mapping.items() if k in only_parameter}
         if exclude_parameter is not None:
-            args_mapping = {k: v for k, v in args_mapping if k not in only_parameter}
+            args_mapping = {k: v for k, v in all_args_mapping.items() if k not in exclude_parameter}
         kwargs_repr = [f"{k!s}={v!r}" for k, v in args_mapping.items()]
+        if len(args_mapping) != len(all_args_mapping):
+            # Add ellipsis in the middle to indicate omitted parameters
+            kwargs_repr.insert(len(kwargs_repr) // 2, "[...]")
         signature = ", ".join(kwargs_repr)
         logger.info(f"CALLING {func.__name__}({signature})")
         value = func(*args, **kwargs)
         logger.info(f"{func.__name__} RETURNED {value!r}")
         return value
+
+    if func is None:
+        # Decorator is called, probably to provide arguments.
+        # Return the decorator again, but with bounded arguments.
+        return functools.partial(
+            debug,
+            only_parameter=only_parameter,
+            exclude_parameter=exclude_parameter,
+        )
 
     return wrapper_debug
 
