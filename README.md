@@ -39,6 +39,7 @@ Create a fork and clone it
 ```sh
 cd viur-toolkit
 pipenv install --dev
+pipenv run precommit_install
 ```
 
 ### Install as editable in your project
@@ -54,3 +55,6 @@ And use the `lint` command
 $ pipenv run lint
 ```
 tu run `pep8check` and `type_check` at once.
+
+#### Alternative:
+Setup the pre-commit hook with `pipenv run precommit_install`.
