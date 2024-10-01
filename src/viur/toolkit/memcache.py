@@ -17,8 +17,6 @@ Seconds: t.TypeAlias = int | float
 Args = t.ParamSpec("Args")
 Value = t.TypeVar("Value")
 
-# FIXME: re-implement
-
 if conf.instance.is_dev_server:
     # On the local dev_appserver, we use Google's memcache stub,
     # originally designed for test cases, as a local emulator.

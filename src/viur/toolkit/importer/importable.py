@@ -427,7 +427,7 @@ class Importable:
 
         return True
 
-    def import_generate_translation(self, skel: SkeletonInstance) -> dict[str, t.Any]:
+    def import_generate_translation(self, skel: SkeletonInstance, import_conf_name: str) -> dict[str, t.Any]:
         """
         Automatically generates a 1-to-1 translation from the given skel.
         Can be subclasses for custom behavior.
@@ -460,7 +460,7 @@ class Importable:
 
         # Otherwise, when not specified, automatically construct a translation from the skeleton with some specials
         elif tr is None:
-            tr = self.import_generate_translation(skel)
+            tr = self.import_generate_translation(skel, import_conf_name)
 
         # update further bones to (probably automatic) translation
         tr |= import_conf.get("translate.update") or {}

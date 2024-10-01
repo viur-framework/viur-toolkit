@@ -19,11 +19,17 @@ types-requests = "*"
 python_version = "3"
 
 [scripts]
+# --- packaging ---------------------------------------------------------------
 clean = "rm -rf dist build src/viur_shop.egg-info"
 #build = "python -m build --wheel"
 build = "python -m build"
 release = "python -m twine upload dist/*"
 release_test = "python -m twine upload --repository testpypi dist/*"
+# --- linters -----------------------------------------------------------------
 pep8check = "bash -c \"git diff -U0 | pycodestyle --diff --show-source\""
-type_check = "bash -c \"mypy .\""
+# mypy must be executed in root dir, therefore we run this in a subshell with a cd before
+type_check = "bash -c \"(cd \\\"$(pipenv --where)\\\"; mypy .)\""
 lint = "bash -c \"pipenv run pep8check ; pipenv run type_check\""
+# --- pre-commit --------------------------------------------------------------
+precommit_install = "./hooks/pre-commit_install.sh"
+precommit_remove = "bash -c \"rm \\\"$(git rev-parse --git-path hooks)/pre-commit\\\"\""
