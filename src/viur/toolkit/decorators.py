@@ -1,4 +1,5 @@
 import functools
+import inspect
 import json
 import logging
 import types
@@ -21,17 +22,46 @@ P = t.ParamSpec("P")
 T = t.TypeVar("T")
 
 
-def debug(func: t.Callable[P, T]) -> t.Callable[P, T]:
-    """Decorator to print the function signature and return value"""
+def debug(
+    func: t.Callable[P, T] | None = None,
+    /,
+    *,
+    only_parameter: list[str] | tuple[str] | None = None,
+    exclude_parameter: list[str] | tuple[str] | None = None,
+) -> t.Callable[P, T] | functools.partial:
+    """Decorator to print the function signature and return value.
+
+    :param func: The function to decorate.
+    :param only_parameter: Include only these parameter in the signature.
+    :param exclude_parameter: Exclude these parameter in the signature.
+    """
+    if only_parameter is not None and exclude_parameter is not None:
+        raise ValueError("only_kwargs and exclude_kwargs cannot be used together")
+
+    if func is None:
+        # Decorator is called, probably to provide arguments.
+        # Return the decorator again, but with bounded arguments.
+        return functools.partial(
+            debug,
+            only_parameter=only_parameter,
+            exclude_parameter=exclude_parameter,
+        )
 
     @functools.wraps(func)
     def wrapper_debug(*args: P.args, **kwargs: P.kwargs) -> T:
-        args_repr = list(map(repr, args))
-        kwargs_repr = [f"{k!s}={v!r}" for k, v in kwargs.items()]
-        signature = ", ".join(args_repr + kwargs_repr)
-        logging.info(f"CALLING {func.__name__}({signature})")
+        all_args_mapping = args_mapping = inspect.getcallargs(func, *args, **kwargs)
+        if only_parameter is not None:
+            args_mapping = {k: v for k, v in all_args_mapping.items() if k in only_parameter}
+        if exclude_parameter is not None:
+            args_mapping = {k: v for k, v in all_args_mapping.items() if k not in exclude_parameter}
+        kwargs_repr = [f"{k!s}={v!r}" for k, v in args_mapping.items()]
+        if len(args_mapping) != len(all_args_mapping):
+            # Add ellipsis in the middle to indicate omitted parameters
+            kwargs_repr.insert(len(kwargs_repr) // 2, "[...]")
+        signature = ", ".join(kwargs_repr)
+        logger.info(f"CALLING {func.__name__}({signature})")
         value = func(*args, **kwargs)
-        logging.info(f"{func.__name__} RETURNED {value}")
+        logger.info(f"{func.__name__} RETURNED {value!r}")
         return value
 
     return wrapper_debug
