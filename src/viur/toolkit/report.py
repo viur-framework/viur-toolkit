@@ -9,13 +9,13 @@ from types import TracebackType
 from google.cloud.storage import Bucket
 
 from viur.core import email
-from viur.core.modules.file import GOOGLE_STORAGE_BUCKET
+from viur.core.modules.file import _private_bucket
 
 __all__ = ["Report"]
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_STORAGE_BUCKET: Bucket = GOOGLE_STORAGE_BUCKET
+GOOGLE_STORAGE_BUCKET: Bucket = _private_bucket
 """Main GOOGLE_STORAGE_BUCKET (here reassigned to add the type hint)"""
 
 
