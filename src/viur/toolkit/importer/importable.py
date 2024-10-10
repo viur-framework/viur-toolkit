@@ -570,7 +570,7 @@ class Importable:
         ret = imp.values_to_skel(
             skel,
             values,
-            self._bone_translation_table[import_conf_name],
+            translate=self._bone_translation_table.get(import_conf_name) or {},
             source_key="key" if "key" in values else "id",  # ViUR 1.x
             enforce=enforce,
             debug=debug,
