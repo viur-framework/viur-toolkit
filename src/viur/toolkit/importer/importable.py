@@ -391,9 +391,7 @@ class Importable:
                     stringTemplate=JINJA_EMAIL_TEMPLATE,
                     skel={
                         "sourceportal": import_conf["source"]["url"],
-                        "targetportal": conf.instance.project_id.replace(
-                            "-viur", ""
-                        ),
+                        "targetportal": conf.instance.project_id,
                         "sourcemodule": import_conf.get("module", self.moduleName),
                         "targetmodule": self.moduleName,
                         "total": total,
@@ -797,9 +795,7 @@ class Importable:
                 stringTemplate=JINJA_EMAIL_TEMPLATE,
                 skel={
                     "sourceportal": import_conf["source"]["url"],
-                    "targetportal": conf.instance.project_id.replace(
-                        "-viur", ""
-                    ),
+                    "targetportal": conf.instance.project_id,
                     "sourcemodule": import_conf.get("module", self.moduleName),
                     "targetmodule": self.moduleName,
                     "total": total,
