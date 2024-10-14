@@ -79,7 +79,7 @@ class Importer(requests.Session):
             raise IOError(f"Unable to logon to '{self.host}'")
 
     def logout(self) -> t.Any:
-        if self.method != "secretkey":
+        if self.method and self.method != "secretkey":
             return self.get("/user/logout", params={"skey": self.skey()}, timeout=30).json()
 
     def skey(self) -> str:
