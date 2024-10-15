@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 Deprecated = "~=1.2"
+mypy = "~=1.11.0"
 
 [dev-packages]
 build="*"
