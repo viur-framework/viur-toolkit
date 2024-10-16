@@ -20,8 +20,8 @@ if tuple(map(int, core_version.split(".", 2)[:2])) >= (3, 7):
     GOOGLE_STORAGE_BUCKET: Bucket = File.get_bucket("")
     """Main (private) GOOGLE_STORAGE_BUCKET"""
 else:
-    from viur.core.modules.file import GOOGLE_STORAGE_BUCKET
-    GOOGLE_STORAGE_BUCKET: Bucket = GOOGLE_STORAGE_BUCKET  # type: ignore[no-redef]
+    from viur.core.modules.file import GOOGLE_STORAGE_BUCKET  # type: ignore[no-redef]
+    GOOGLE_STORAGE_BUCKET: Bucket = GOOGLE_STORAGE_BUCKET
     """Main GOOGLE_STORAGE_BUCKET (here reassigned to add the type hint)"""
 
 class Report:
