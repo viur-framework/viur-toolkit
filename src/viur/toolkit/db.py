@@ -169,7 +169,8 @@ def set_status(
                 if retry <= 0:
                     raise
 
-            logging.debug(f"{e}, retrying {retry} more times")
+                logging.debug(f"{e}, retrying {retry} more times")
+
             time.sleep(1)
     else:
         return transaction()
