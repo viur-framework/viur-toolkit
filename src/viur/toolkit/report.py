@@ -9,15 +9,20 @@ from types import TracebackType
 from google.cloud.storage import Bucket
 
 from viur.core import email
-from viur.core.modules.file import GOOGLE_STORAGE_BUCKET
+from viur.core.version import __version__ as core_version
+from viur.core.modules.file import File
 
 __all__ = ["Report"]
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_STORAGE_BUCKET: Bucket = GOOGLE_STORAGE_BUCKET
-"""Main GOOGLE_STORAGE_BUCKET (here reassigned to add the type hint)"""
-
+if tuple(map(int, core_version.split(".", 2)[:2])) >= (3, 7):
+    GOOGLE_STORAGE_BUCKET: Bucket = File.get_bucket("")
+    """Main (private) GOOGLE_STORAGE_BUCKET"""
+else:
+    from viur.core.modules.file import GOOGLE_STORAGE_BUCKET  # type: ignore[no-redef]
+    GOOGLE_STORAGE_BUCKET: Bucket = GOOGLE_STORAGE_BUCKET
+    """Main GOOGLE_STORAGE_BUCKET (here reassigned to add the type hint)"""
 
 class Report:
     """Reports are a kind of logging
