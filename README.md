@@ -31,7 +31,7 @@ if toolkit.user_has_access("root"):
 ```
 
 
-## Development
+## Development / Contributing
 
 Create a fork and clone it
 
@@ -48,9 +48,19 @@ pipenv install -e path/to/viur-toolkit
 ```
 
 ### Code linting & type checking
-
-And use the `lint` command
+Use the `lint` command
 ```sh
 $ pipenv run lint
 ```
 tu run `pep8check` and `type_check` at once.
+
+### Branches
+Depending on what kind of change your Pull Request contains, please submit your PR against the following branches:
+
+* **main:**
+  fixes/patches that fix a problem with existing code go into this branch.
+  This results in a new patch version (X.X.n+1 where n is the current patch-level).
+* **develop:**
+  new features, refactorings, or adjustments for new versions of dependencies are added to this branch.
+  This becomes a new minor version (X.n+1.0) where n is the current minor-level).
+  Depending on the complexity of the changes, a new major release (n+1.0.0, where n is the current major level) may be chosen instead.
