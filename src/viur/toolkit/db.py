@@ -159,15 +159,18 @@ def set_status(
         return obj
 
     # Retry loop
-    while True:
-        try:
-            return db.RunInTransaction(transaction)
+    if not db.IsInTransaction:
+        while True:
+            try:
+                return db.RunInTransaction(transaction)
 
-        except db.ViurDatastoreError as e:
-            retry -= 1
-            if retry <= 0:
-                raise
+            except db.ViurDatastoreError as e:
+                retry -= 1
+                if retry <= 0:
+                    raise
 
-            logging.debug(f"{e}, retrying {retry} more times")
+                logging.debug(f"{e}, retrying {retry} more times")
 
-        time.sleep(1)
+            time.sleep(1)
+    else:
+        return transaction()
