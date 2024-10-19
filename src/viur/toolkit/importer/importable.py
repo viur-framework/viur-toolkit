@@ -618,7 +618,7 @@ class Importable:
             if handler in ["hierarchy", "tree"]:
                 _args = (skel_type, skel)
             else:
-                _args = (skel,)
+                _args = (skel,)  # type: ignore[assignment]
             if ret >= 0:
                 self.onEdited(*_args)
             elif hasattr(self, "onAdded"):  # Singleton has no onAdded hook
