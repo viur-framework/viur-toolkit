@@ -299,7 +299,8 @@ class Importable:
         if "cursor" not in params:
             params["cursor"] = cursor
 
-        url = f"""{import_conf.get("module", self.moduleName)}/{import_conf.get("action", "list")}"""
+        default_action = "view" if handler == "singleton" else "list"
+        url = f"""{import_conf.get("module", self.moduleName)}/{import_conf.get("action", default_action)}"""
         answ = imp.post(url, params=params, timeout=60)
 
         if not answ.ok:
@@ -323,7 +324,9 @@ class Importable:
         self.create_config(skel)
 
         # Perform import
-        if isinstance(answ, dict):
+        if isinstance(answ, dict) and handler == "singleton":
+            skellist = [answ["values"]]
+        elif isinstance(answ, dict):
             skellist = answ.get("skellist", [])
             cursor = answ.get("cursor")
         elif isinstance(answ, list):
@@ -613,15 +616,13 @@ class Importable:
             handler = self.get_handler()
 
             if handler in ["hierarchy", "tree"]:
-                if ret < 0:
-                    self.onAdded(skel_type, skel)
-                else:
-                    self.onEdited(skel_type, skel)
+                _args = (skel_type, skel)
             else:
-                if ret < 0:
-                    self.onAdded(skel)
-                else:
-                    self.onEdited(skel)
+                _args = (skel,)  # type: ignore[assignment]
+            if ret >= 0:
+                self.onEdited(*_args)
+            elif hasattr(self, "onAdded"):  # Singleton has no onAdded hook
+                self.onAdded(*_args)
 
             return True
         else:
