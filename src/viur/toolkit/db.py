@@ -158,7 +158,11 @@ def set_status(
 
         return obj
 
-    # Retry loop
+    # In case of already in transaction, just call the function.
+    if db.IsInTransaction:
+        return transaction()
+
+    # Otherwise, run the retry loop
     while True:
         try:
             return db.RunInTransaction(transaction)
