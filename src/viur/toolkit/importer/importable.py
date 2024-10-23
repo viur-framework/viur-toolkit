@@ -575,6 +575,7 @@ class Importable:
             source_key="key" if "key" in values else "id",  # ViUR 1.x
             enforce=enforce,
             debug=debug,
+            module=self,
         )
 
         if "outdated" in skel:

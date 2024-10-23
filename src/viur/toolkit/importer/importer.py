@@ -554,8 +554,8 @@ class Importer(requests.Session):
 
                 logger.debug(f"{value=} [OUT]")
 
-            new_value_as_str = html.unescape(str(bone_value)).strip()
-            old_value_as_str = html.unescape(str(value)).strip()
+            old_value_as_str = html.unescape(str(bone_value)).strip()
+            new_value_as_str = html.unescape(str(value)).strip()
 
             if debug:
                 logger.debug(
