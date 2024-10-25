@@ -589,6 +589,11 @@ class Importable:
             if not self.onEntryChanged(skel, values):
                 return False
 
+            if ret < 0:
+                self.onAdd(skel)
+            else:
+                self.onEdit(skel)
+
             # Set importdate when available
             if "importdate" in skel:
                 logger.debug(
