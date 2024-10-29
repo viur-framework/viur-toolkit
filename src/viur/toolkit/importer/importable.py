@@ -819,6 +819,9 @@ class Importable:
     # types from viur-core prototypes
 
     moduleName: str
+    onAdd: types.MethodType
+    onEdit: types.MethodType
+    onDelete: types.MethodType
     onAdded: types.MethodType
     onEdited: types.MethodType
     onDeleted: types.MethodType
