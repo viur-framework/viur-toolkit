@@ -585,9 +585,20 @@ class Importable:
             logger.info(f"dry run {ret=}, {skel=}")
             return ret != 0
 
+        handler = self.get_handler()
+        if handler in ["hierarchy", "tree"]:
+            _hook_args = (skel_type, skel)
+        else:
+            _hook_args = (skel,)  # type: ignore[assignment]
+
         if ret != 0 or enforce:
             if not self.onEntryChanged(skel, values):
                 return False
+
+            if ret < 0:
+                self.onAdd(*_hook_args)
+            else:
+                self.onEdit(*_hook_args)
 
             # Set importdate when available
             if "importdate" in skel:
@@ -614,16 +625,10 @@ class Importable:
                 else:
                     break
 
-            handler = self.get_handler()
-
-            if handler in ["hierarchy", "tree"]:
-                _args = (skel_type, skel)
-            else:
-                _args = (skel,)  # type: ignore[assignment]
             if ret >= 0:
-                self.onEdited(*_args)
+                self.onEdited(*_hook_args)
             elif hasattr(self, "onAdded"):  # Singleton has no onAdded hook
-                self.onAdded(*_args)
+                self.onAdded(*_hook_args)
 
             return True
         else:
@@ -814,6 +819,9 @@ class Importable:
     # types from viur-core prototypes
 
     moduleName: str
+    onAdd: types.MethodType
+    onEdit: types.MethodType
+    onDelete: types.MethodType
     onAdded: types.MethodType
     onEdited: types.MethodType
     onDeleted: types.MethodType
