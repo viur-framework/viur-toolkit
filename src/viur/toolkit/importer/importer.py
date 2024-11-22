@@ -9,6 +9,7 @@ import logging
 import mimetypes
 import numbers
 import re
+import string
 import time
 import typing as t
 
@@ -261,6 +262,13 @@ class Importer(requests.Session):
             content = res.content
 
         logger.debug(f"{name=} has {len(content)!r} bytes")
+
+        if not conf.main_app.vi.file.is_valid_filename(name):
+            logger.error(f"file {name=} is invalid")
+            # simplify name
+            name = "".join(char for char in name if char in string.ascii_letters + string.digits + " _-.")
+            name = name[:conf.main_app.vi.file.MAX_FILENAME_LEN]
+            logger.info(f"Use sanitized {name=}")
 
         if "import_key" in dir(file_skel_cls):
             return conf.main_app.vi.file.write(name, content, mimetype, import_key=info["key"])
