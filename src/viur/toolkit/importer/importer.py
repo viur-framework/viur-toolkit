@@ -10,6 +10,7 @@ import mimetypes
 import numbers
 import re
 import string
+import time
 import typing as t
 
 import requests
@@ -335,7 +336,21 @@ class Importer(requests.Session):
                         if debug:
                             logger.debug(f"{bone_name} name {fileName=} is not known")
 
-                        key = self.import_file(entry["dest"])
+                        for attempt in (rng := range(3)):
+                            try:
+                                key = self.import_file(entry["dest"])
+                            except ValueError as exc:
+                                # Catch unique import_key errors in case an other import was faster
+                                logger.error(f'{entry["dest"]=}')
+                                logger.exception(exc)
+                                if attempt == rng.stop:
+                                    raise exc
+                                else:
+                                    logger.error(f"Attempt {attempt+1}/{rng.stop} failed")
+                                    time.sleep(2 ** attempt)
+                            else:
+                                break
+
                         if not key:
                             continue
                         # assert (key := self.import_file(entry["dest"]))
