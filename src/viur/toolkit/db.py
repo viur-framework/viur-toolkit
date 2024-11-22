@@ -61,8 +61,8 @@ def increase_counter(key: _KeyType, name: str, value: float | int = 1, start: fl
 
 
 def set_status(
-    key: _KeyType,
-    values: dict | t.Callable[[skeleton.SkeletonInstance | db.Entity], None],
+    key: t.Optional[_KeyType] = None,
+    values: dict | t.Callable[[skeleton.SkeletonInstance | db.Entity], None] | None = None,
     precondition: t.Optional[dict | t.Callable[[skeleton.SkeletonInstance | db.Entity], None]] = None,
     create: dict[str, t.Any] | t.Callable[[skeleton.SkeletonInstance | db.Entity], None] | bool = False,
     skel: t.Optional[skeleton.SkeletonInstance] = None,
@@ -84,11 +84,15 @@ def set_status(
     If the function does not raise an Exception, all went well.
     It returns either the assigned skel, or the db.Entity on success.
     """
-
+    if key is None and skel is None:
+        raise ValueError("No Key is provided")
+    elif key is None and skel is not None:
+        key = skel["key"]
+    if values is None:
+        raise ValueError("No values provided")
     # Transactional function
     def transaction() -> skeleton.SkeletonInstance | db.Entity:
         exists = True
-
         # Use skel or db.Entity
         if skel:
             if not skel.fromDB(key):
