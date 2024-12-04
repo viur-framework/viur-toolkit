@@ -382,6 +382,7 @@ class Importer(requests.Session):
                     if lang in bone.languages:
                         if debug:
                             logger.debug(f"{bone_name=} | {lang=} | {val=}")
+
                         if not val:
                             continue
 
