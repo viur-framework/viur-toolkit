@@ -380,7 +380,9 @@ class Importer(requests.Session):
             if bone.languages and isinstance(value, dict):
                 for lang, val in value.items():
                     if lang in bone.languages:
-                        if not bone_value.get(lang):
+                        if debug:
+                            logger.debug(f"{bone_name=} | {lang=} | {val=}")
+                        if not val:
                             continue
 
                         if isinstance(val, dict):
@@ -388,6 +390,8 @@ class Importer(requests.Session):
                         changes = handle_entries(changes, val, lang)
 
             else:
+                if debug:
+                    logger.debug(f"{bone_name=} | {value=}")
 
                 if isinstance(value, dict):
                     value = [value]
