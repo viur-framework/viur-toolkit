@@ -419,6 +419,7 @@ class Importable:
             updated=updated,
             follow=follow,
             dry_run=dry_run,
+            debug=debug,
             cookies=imp.cookies.get_dict(),
             delete_filter=delete_filter,
             import_conf_name=import_conf_name,
