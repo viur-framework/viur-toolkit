@@ -88,6 +88,7 @@ class Importable:
         "translate.ignore": None,  # Bones to be ignored in automatically generated translation
         "action": "list",  # Action to run, default is "list"
         "limit": 99,  # Amount of items to fetch per request (only for list-ables)
+        "debuglimit": None,  # Number of items to import (use for debugging only!)
         "render": "vi",  # Renderer to run on
         "params": None,  # Further parameters passed to the action
         "follow": [],  # Following modules to be imported, that depend on this import.
@@ -293,8 +294,8 @@ class Importable:
             params.update(conf_params)
 
         if "limit" not in params:
-            params["limit"] = import_conf.get("limit", 99)
-            params["amount"] = import_conf.get("limit", 99)
+            params["limit"] = import_conf.get("limit", 99)  # viur >= 3
+            params["amount"] = import_conf.get("limit", 99)  # viur < 3
 
         if "cursor" not in params:
             params["cursor"] = cursor
@@ -356,9 +357,10 @@ class Importable:
             ):
                 updated += 1
 
-                # if total >= 5:
-                #    skellist = ()
-                #    break
+                if debuglimit := import_conf.get("debuglimit"):
+                    if total >= debuglimit:
+                        skellist = ()
+                        break
 
         logger.info("%s: %d entries imported, %d entries updated", self.moduleName, total, updated)
 
