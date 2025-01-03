@@ -521,15 +521,15 @@ class Importer(requests.Session):
                     elif bone_value[lang] != val:
                         changes += 1
 
-                    if bone.multiple:
+                    if not bone.multiple:
                         if val is None:
                             val = []
-                        elif isinstance(val, (str, numbers.Number)):
+                        elif isinstance(val, (str, bool, numbers.Number)):
                             val = [val]
                         elif not isinstance(val, list):
                             logger.warning(f"Unexpected {val=}")
 
-                    logger.debug(f"{val=} IN")
+                    logger.debug(f"{bone_name=} {lang=} {val=} IN")
 
                     if isinstance(bone, bones.BooleanBone):
                         val = [utils.parse.bool(value) for value in val]
@@ -548,11 +548,16 @@ class Importer(requests.Session):
 
                         val = values
 
-                    logger.debug(f"{val=} OUT")
+                    logger.debug(f"{bone_name=} {lang=} {val=} OUT")
 
                     try:
-                        if not skel.setBoneValue(bone_name, val, language=lang):
-                            logger.error(f"Failed to set {bone_name=} {lang=} to {value=}")
+                        if bone.multiple:
+                            for i, v in enumerate(val):
+                                if not skel.setBoneValue(bone_name, v, append=i > 0, language=lang):
+                                    logger.error(f"Failed to set {bone_name=} {lang=} to {value=}")
+                        else:
+                            if not skel.setBoneValue(bone_name, val[0], language=lang):
+                                logger.error(f"Failed to set {bone_name=} {lang=} to {value=}")
 
                     except Exception as exc:  # noqa
                         exc.add_note(f"{bone_name=} | {bone_value=} | {lang=} | {val=}")
