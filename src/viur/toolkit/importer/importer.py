@@ -206,12 +206,18 @@ class Importer(requests.Session):
 
         return req.json()
 
-    def import_file(self, info: dict[str, t.Any]) -> None | db.Key:
+    def import_file(self, info: dict[str, t.Any], public: bool = False) -> None | db.Key:
         assert "dlkey" in info and "name" in info
 
         name = info["name"]
         dlkey = info["dlkey"]
-        servingurl = info.get("servingurl")
+
+        # retrieve servingurl as fallback download possibility
+        servingurl = (
+            info.get("servingurl")  # viur < 3
+            or info.get("serving_url")  # viur >= 3.7
+        )
+
         try:
             size = info["size"]
         except KeyError:
@@ -270,10 +276,16 @@ class Importer(requests.Session):
             name = name[:conf.main_app.vi.file.MAX_FILENAME_LEN]
             logger.info(f"Use sanitized {name=}")
 
-        if "import_key" in dir(file_skel_cls):
-            return conf.main_app.vi.file.write(name, content, mimetype, import_key=info["key"])
+        # Write the file, probably with some additional kwargs.
+        kwargs = {}
 
-        return conf.main_app.file.write(name, content, mimetype)
+        if public:
+            kwargs["public"] = True
+
+        if "import_key" in dir(file_skel_cls):
+            kwargs["import_key"] = info["key"]
+
+        return conf.main_app.file.write(name, content, mimetype, **kwargs)
 
     def set_skel_value(self, skel: skeleton.SkeletonInstance, bone_name: str, value: t.Any, debug: bool = False) -> int:
         # FIXME: This method is a total mess up of bone types and nested structure.
@@ -338,7 +350,8 @@ class Importer(requests.Session):
 
                         for attempt in (rng := range(3)):
                             try:
-                                key = self.import_file(entry["dest"])
+                                key = self.import_file(entry["dest"], getattr(bone, "public", False))
+
                             except ValueError as exc:
                                 # Catch unique import_key errors in case an other import was faster
                                 logger.error(f'{entry["dest"]=}')
