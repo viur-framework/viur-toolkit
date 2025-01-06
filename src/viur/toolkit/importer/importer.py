@@ -536,7 +536,7 @@ class Importer(requests.Session):
 
                         elif isinstance(bone, bones.NumericBone):
                             values = []
-                            for value in val:  # <- iterates over val as well, even when its a single value
+                            for value in val:
                                 try:
                                     value = float(value)
 
