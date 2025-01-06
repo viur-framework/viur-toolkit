@@ -9,6 +9,8 @@ import logging
 import mimetypes
 import numbers
 import re
+import string
+import time
 import typing as t
 
 import requests
@@ -261,6 +263,13 @@ class Importer(requests.Session):
 
         logger.debug(f"{name=} has {len(content)!r} bytes")
 
+        if not conf.main_app.vi.file.is_valid_filename(name):
+            logger.error(f"file {name=} is invalid")
+            # simplify name
+            name = "".join(char for char in name if char in string.ascii_letters + string.digits + " _-.")
+            name = name[:conf.main_app.vi.file.MAX_FILENAME_LEN]
+            logger.info(f"Use sanitized {name=}")
+
         if "import_key" in dir(file_skel_cls):
             return conf.main_app.vi.file.write(name, content, mimetype, import_key=info["key"])
 
@@ -327,7 +336,21 @@ class Importer(requests.Session):
                         if debug:
                             logger.debug(f"{bone_name} name {fileName=} is not known")
 
-                        key = self.import_file(entry["dest"])
+                        for attempt in (rng := range(3)):
+                            try:
+                                key = self.import_file(entry["dest"])
+                            except ValueError as exc:
+                                # Catch unique import_key errors in case an other import was faster
+                                logger.error(f'{entry["dest"]=}')
+                                logger.exception(exc)
+                                if attempt == rng.stop:
+                                    raise exc
+                                else:
+                                    logger.error(f"Attempt {attempt+1}/{rng.stop} failed")
+                                    time.sleep(2 ** attempt)
+                            else:
+                                break
+
                         if not key:
                             continue
                         # assert (key := self.import_file(entry["dest"]))
@@ -357,7 +380,10 @@ class Importer(requests.Session):
             if bone.languages and isinstance(value, dict):
                 for lang, val in value.items():
                     if lang in bone.languages:
-                        if not bone_value.get(lang):
+                        if debug:
+                            logger.debug(f"{bone_name=} | {lang=} | {val=}")
+
+                        if not val:
                             continue
 
                         if isinstance(val, dict):
@@ -365,6 +391,8 @@ class Importer(requests.Session):
                         changes = handle_entries(changes, val, lang)
 
             else:
+                if debug:
+                    logger.debug(f"{bone_name=} | {value=}")
 
                 if isinstance(value, dict):
                     value = [value]
