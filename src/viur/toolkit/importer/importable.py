@@ -88,7 +88,7 @@ class Importable:
         "translate.ignore": None,  # Bones to be ignored in automatically generated translation
         "action": "list",  # Action to run, default is "list"
         "limit": 99,  # Amount of items to fetch per request (only for list-ables)
-        "debuglimit": None,  # Number of items to import (use for debugging only!)
+        "debuglimit": None,  # After this amount of entries we stop the import (use it for debugging only!)
         "render": "vi",  # Renderer to run on
         "params": None,  # Further parameters passed to the action
         "follow": [],  # Following modules to be imported, that depend on this import.
@@ -359,7 +359,7 @@ class Importable:
 
                 if debuglimit := import_conf.get("debuglimit"):
                     if total >= debuglimit:
-                        skellist = ()
+                        skellist = []
                         break
 
         logger.info("%s: %d entries imported, %d entries updated", self.moduleName, total, updated)
