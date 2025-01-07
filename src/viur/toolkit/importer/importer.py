@@ -471,12 +471,6 @@ class Importer(requests.Session):
                 elif not bone_value:
                     bone_value = []
 
-                if bone.languages:
-                    skel[bone_name] = {lang: [] if bone.multiple else None
-                                       for lang in bone.languages}
-                else:
-                    skel[bone_name] = [] if bone.multiple else None
-
                 for nentry in val:
                     if bone_value:
                         # There is an old entry
@@ -494,17 +488,30 @@ class Importer(requests.Session):
 
                     if debug:
                         logger.debug(f"Assign {bone_name=}, {using_skel=}, append={bone.multiple}, language={lang}")
-                    if not skel.setBoneValue(bone_name, using_skel, append=bone.multiple, language=lang):
-                        logger.error(f"Unable to set bone {bone_name}.{lang} to {using_skel}")
+
+                    # RecordBone.setBoneValue() is not implemented, therefore we have to do it on our own.
+                    if lang:
+                        if bone.multiple:
+                            skel[bone_name][lang].append(using_skel)
+                        else:
+                            skel[bone_name][lang] = using_skel
+                    elif bone.multiple:
+                        skel[bone_name].append(using_skel)
+                    else:
+                        skel[bone_name] = using_skel
 
             if debug:
                 logger.debug(f"{bone.languages=} // {value}")
 
             if bone.languages:
+                if bone.languages:
+                    skel[bone_name] = {lang: [] if bone.multiple else None for lang in bone.languages}
+
                 for lang in bone.languages:
                     if value.get(lang):
                         set_value(value[lang], lang)
             else:
+                skel[bone_name] = [] if bone.multiple else None
                 set_value(value, None)
 
         elif bone.languages and isinstance(value, dict):
