@@ -26,15 +26,12 @@ def normalize_key(key: _KeyType) -> db.Key:
 
 def write_in_transaction(key: _KeyType, create_missing_entity: bool = True, **values: t.Any) -> db.Entity:
     def txn(_key: db.Key, _values: dict[str, t.Any]) -> db.Entity:
-        try:
-            entity = db.Get(_key)
-        except db.NotFoundError:
+        if (entity := db.Get(_key)) is None:
             if create_missing_entity:
                 entity = db.Entity(_key)
             else:
-                raise
-        for k, v in _values.items():
-            entity[k] = v
+                raise db.NotFoundError(f"Entity {_key} does not exist")
+        entity.update(values)
         db.Put(entity)
         return entity
 
@@ -42,14 +39,14 @@ def write_in_transaction(key: _KeyType, create_missing_entity: bool = True, **va
 
 
 def increase_counter(key: _KeyType, name: str, value: float | int = 1, start: float | int = 0) -> int | float:
-    def txn(_key: db.Key, _name: str, _value: float | int, _start: float | int) -> float | int:
-        try:
-            entity = db.Get(_key)
-        except db.NotFoundError:
-            # Use not db.GetOrInsert here, we write the entity later anyway
-            # and can therefore save the db.Put in db.GetOrInsert
-            entity = db.Entity(_key)
+    """Increase the counter by `value` and return the old value.
 
+    That means the entity holds always the next value.
+    """
+
+    def txn(_key: db.Key, _name: str, _value: float | int, _start: float | int) -> float | int:
+        if (entity := db.Get(_key)) is None:
+            entity = db.Entity(_key)
         if _name not in entity:
             entity[_name] = _start
         old_value = entity[_name]
