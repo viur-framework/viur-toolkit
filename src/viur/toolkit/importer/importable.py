@@ -319,9 +319,8 @@ class Importable:
             self._kickoff_follow(importdate, inform, import_conf_name=import_conf_name, **kwargs)
             return None
 
-        # Get skeleton
+        # Get skeleton (used for config creation and examination)
         skel = self.import_skel(skelType=kwargs.get("skelType"))
-
         self.create_config(skel)
 
         # Perform import
@@ -345,7 +344,7 @@ class Importable:
 
             if self._convert_entry(
                 imp,
-                skel,
+                self.import_skel(skelType=kwargs.get("skelType")),  # Get a fresh import skel
                 values,
                 importdate,
                 skel_type=kwargs.get("skelType"),
@@ -570,7 +569,6 @@ class Importable:
         """
         Internal function for converting one entry.
         """
-        skel.setEntity(db.Entity())
         ret = imp.values_to_skel(
             skel,
             values,
