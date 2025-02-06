@@ -34,12 +34,33 @@ def get_task_retry_count() -> int:
         return -1
 
 
-def without_render_preparation(skel: SkeletonInstance) -> SkeletonInstance:
-    """Remove clones skel without render preparation if was set else the skel as is"""
+def without_render_preparation(skel: SkeletonInstance, full_clone: bool = False) -> SkeletonInstance:
+    """Return the SkeletonInstance without renderPreparation.
+
+    This method is useful (and unfortunately necessary due to the VIUR design)
+    if you call methods from the template that should work on the
+    `SkeletonInstance.accessedValues` and not on the `SkeletonInstance.renderAccessedValues`.
+
+    If the SkeletonInstance does not have renderPreparation, it will be returned as is.
+    If renderPreparation is enabled, a new SkeletonInstance is created.
+    However, unless `full_clone` is True, the SkeletonInstance will use the
+    identical objects as the source skeleton. It just "removes" the
+    "renderPreparation mode" and keep it for the source skel enabled.
+    """
     if skel.renderPreparation is not None:
         # TODO: ViUR, I DONT WANT TO HAVE RENDERPREPARATION ON MODULE LAYER!!!
-        skel = skel.clone()
-        skel.renderPreparation = None
+        if full_clone:
+            skel = skel.clone()
+        else:
+            src_skel = skel
+            # Create a new SkeletonInstance with the same object,
+            # but without enabled renderPreparation
+            skel = SkeletonInstance(src_skel.skeletonCls, bone_map=src_skel.boneMap)
+            skel.accessedValues = src_skel.accessedValues
+            skel.dbEntity = src_skel.dbEntity
+            skel.errors = src_skel.errors
+            skel.is_cloned = src_skel.is_cloned
+        assert skel.renderPreparation is None
     return skel
 
 
