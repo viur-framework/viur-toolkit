@@ -37,8 +37,8 @@ def get_task_retry_count() -> int:
 def without_render_preparation(skel: SkeletonInstance, full_clone: bool = False) -> SkeletonInstance:
     """Return the SkeletonInstance without renderPreparation.
 
-    This method is useful (and unfortunately necessary due to the VIUR design)
-    if you call methods from the template that should work on the
+    This method is useful (and unfortunately necessary due to the ViUR design)
+    if you call python methods from the jinja template that should work on the
     `SkeletonInstance.accessedValues` and not on the `SkeletonInstance.renderAccessedValues`.
 
     If the SkeletonInstance does not have renderPreparation, it will be returned as is.
