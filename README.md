@@ -1,4 +1,5 @@
 <div align="center">
+    <img src="https://github.com/viur-framework/viur-artwork/raw/main/icons/icon-toolkit.svg" height="196" alt="A hexagonal logo of Toolkit" title="Toolkit logo"/>
     <h1>viur-toolkit</h1>
     <a href="https://pypi.org/project/viur-toolkit/">
         <img alt="Badge showing current PyPI version" title="PyPI" src="https://img.shields.io/pypi/v/viur-toolkit">
