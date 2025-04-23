@@ -4,9 +4,21 @@ import operator
 import typing as t
 
 __all__ = [
+    "NOT_SET",
     "vars_full",
     "freeze_dict",
 ]
+
+
+class NotSet:
+    def __repr__(self) -> str:
+        return "<NOT_SET>"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+NOT_SET: t.Final[NotSet] = NotSet()
 
 
 def vars_full(
@@ -25,14 +37,14 @@ def vars_full(
     res = {}
     if hasattr(obj, "__slots__"):
         for slot in obj.__slots__:
-            res[slot] = getattr(obj, slot)
+            res[slot] = getattr(obj, slot, NOT_SET)
     elif hasattr(obj, "__dict__"):
         res |= vars(obj)
     if not include_properties:
         return res
     for attr, value in vars(type(obj)).items():
         if isinstance(value, (property, functools.cached_property)):
-            res[attr] = getattr(obj, attr)
+            res[attr] = getattr(obj, attr, NOT_SET)
     return res
 
 
