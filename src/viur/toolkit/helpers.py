@@ -18,7 +18,7 @@ class NotSet:
         return False
 
 
-NOT_SET : t.Final[NotSet] = NotSet()
+NOT_SET: t.Final[NotSet] = NotSet()
 
 
 def vars_full(
