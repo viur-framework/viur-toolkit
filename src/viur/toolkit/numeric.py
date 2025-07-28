@@ -36,4 +36,8 @@ def format_number(value: float, frac_digits: int = 2, decimal_separator: str = "
     return number_str.replace(",", decimal_separator)
 
 
-format_currency = deprecated(format_number, reason="format_currency has been renamed to format_number", version="0.5.0")
+format_currency = deprecated(  # type: ignore
+    format_number,
+    reason="format_currency has been renamed to format_number",
+    version="0.5.0",
+)
