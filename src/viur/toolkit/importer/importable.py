@@ -508,7 +508,7 @@ class Importable:
 
         self.create_config(skel, import_conf_name=import_conf_name)
 
-        key = db.KeyClass.from_legacy_urlsafe(key)
+        key = db.Key.from_legacy_urlsafe(key)
 
         if not kindName:
             kindName = import_conf.get("module")

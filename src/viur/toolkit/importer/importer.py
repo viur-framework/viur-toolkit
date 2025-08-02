@@ -448,7 +448,7 @@ class Importer(requests.Session):
                 # Rewrite the key of the referenced entity
                 if isinstance(nentry, dict):
                     assert "rel" in nentry and "dest" in nentry, "This doesn't look like a RelationalBone"
-                    key = db.Key(bone.kind, db.KeyClass.from_legacy_urlsafe(nentry["dest"]["key"]).id_or_name)
+                    key = db.Key(bone.kind, db.Key.from_legacy_urlsafe(nentry["dest"]["key"]).id_or_name)
 
                 elif isinstance(nentry, (str, db.Key)):
                     key = nentry
@@ -761,7 +761,7 @@ class Importer(requests.Session):
         exists = True
 
         try:
-            key = db.KeyClass.from_legacy_urlsafe(values[source_key])
+            key = db.Key.from_legacy_urlsafe(values[source_key])
         except AttributeError:
             key = db.keyHelper(values[source_key], skel.kindName)
 
