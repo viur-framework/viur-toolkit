@@ -134,8 +134,8 @@ def resolve_nested_path(
                 for val in value
             ]
 
-        elif isinstance(value, list | tuple) and part.isdigit():
-            # access exactly the n-th item of an iterable
+        elif isinstance(value, list | tuple) and part.lstrip('-').isdigit():
+            # access exactly the n-th item of an iterable (supports negative indices)
             part = int(part)
 
         # access a dict-value by key or iterable by index
