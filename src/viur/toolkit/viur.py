@@ -90,7 +90,7 @@ def iter_skel(query: db.Query) -> t.Iterator[SkeletonInstance]:
             break
 
 
-def ensure_translation(value: str | i18n.translate, *args, **kwargs) -> i18n.translate | None:
+def ensure_translation(value: str | i18n.translate, *args: t.Any, **kwargs: t.Any) -> i18n.translate | None:
     """
     Ensure that the given value is an ``i18n.translate`` object.
 
