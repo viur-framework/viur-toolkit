@@ -136,11 +136,11 @@ def resolve_nested_path(
 
         elif isinstance(value, list | tuple) and part.lstrip("-").isdigit():
             # access exactly the n-th item of an iterable (supports negative indices)
-            part = int(part)
+            part = int(part)  # type: ignore[assignment]
 
         # access a dict-value by key or iterable by index
         try:
-            value = value[part]
+            value = value[part]  # type: ignore[call-overload]
         except (KeyError, AttributeError, TypeError, IndexError) as exc:
             if fail:
                 remaining_path_path = ".".join(path[idx:])
