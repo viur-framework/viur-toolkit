@@ -5,7 +5,7 @@ Helper for ViUR-core types and behavior
 import logging
 import typing as t
 
-from viur.core import current, db
+from viur.core import current, db, i18n
 from viur.core.skeleton import SkeletonInstance, skeletonByKind
 
 __all__ = [
@@ -14,6 +14,7 @@ __all__ = [
     "without_render_preparation",
     "get_full_skel_from_ref_skel",
     "iter_skel",
+    "ensure_translation",
 ]
 
 logger = logging.getLogger(__name__)
@@ -87,3 +88,24 @@ def iter_skel(query: db.Query) -> t.Iterator[SkeletonInstance]:
         except GeneratorExit:
             logger.warning("GeneratorExit. Stop iteration.")
             break
+
+
+def ensure_translation(value: str | i18n.translate, *args, **kwargs) -> i18n.translate | None:
+    """
+    Ensure that the given value is an ``i18n.translate`` object.
+
+    If the input value is already an instance of ``i18n.translate``, it is returned unchanged.
+    If the value is a string, it will be converted to an ``i18n.translate`` object using the
+    provided arguments.
+    If the value is ``None``, the function returns ``None``.
+
+    :param value: The value to ensure as a translation object.
+    :param args: Additional positional arguments passed to the ``i18n.translate`` constructor if ``value`` is a string.
+    :param kwargs: Additional keyword arguments passed to the ``i18n.translate`` constructor if ``value`` is a string.
+    :return: An ``i18n.translate`` instance if conversion is possible, or ``None`` if ``value`` was ``None``.
+    """
+    if isinstance(value, i18n.translate):
+        return value
+    if value is None:
+        return None
+    return i18n.translate(value, *args, **kwargs)
