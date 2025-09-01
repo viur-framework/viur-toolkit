@@ -708,7 +708,6 @@ class Importable:
 
         # Get skeleton
         skel = self.import_skel(skelType=kwargs.get("skelType"))
-        assert skel
 
         q = skel.all()
 
