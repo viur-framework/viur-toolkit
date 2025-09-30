@@ -228,7 +228,7 @@ class Importer(requests.Session):
             try:
                 size = int(size)
             except ValueError:
-                logger.error("cannot convert {size!r} to int", size)
+                logger.error(f"cannot convert {size!r} to int")
                 return None
 
         if size > 200_000_000:
