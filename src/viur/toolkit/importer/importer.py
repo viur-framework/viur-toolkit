@@ -151,6 +151,8 @@ class Importer(requests.Session):
                     if res:
                         if res == "OKAY":
                             break
+                        elif res["action"] == "login_success":
+                            break
                         elif self.method == "userpassword+otp" and res["action"] == "otp":
                             answ = self.post("/user/f2_timebasedotp/otp",
                                              data={"otptoken": self.otp,
