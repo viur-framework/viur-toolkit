@@ -46,3 +46,12 @@ class CachedProperty(t.Generic[Value, Args]):
         self._value = self.func(*self.args)
         self._lifetime_ends = utils.utcNow() + self.lifetime
         return self._value
+
+    def clear(self) -> None:
+        """Drop the cached value; the next :meth:`get` call recomputes it.
+
+        Use this when an external event invalidates the cache before the
+        configured ``lifetime`` has expired.
+        """
+        self._value = None
+        self._lifetime_ends = None
