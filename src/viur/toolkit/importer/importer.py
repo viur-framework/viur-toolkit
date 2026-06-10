@@ -151,6 +151,8 @@ class Importer(requests.Session):
                     if res:
                         if res == "OKAY":
                             break
+                        elif res["action"] == "login_success":
+                            break
                         elif self.method == "userpassword+otp" and res["action"] == "otp":
                             answ = self.post("/user/f2_timebasedotp/otp",
                                              data={"otptoken": self.otp,
@@ -456,7 +458,7 @@ class Importer(requests.Session):
                     raise ValueError()
 
                 # In case of an using_skel, check for differences also.
-                if using_skel:
+                if using_skel is not None:
                     using_skel.unserialize(oentry["rel"] if oentry else {})
                     changes += self.translate(
                         using_skel, nentry["rel"] or {},
@@ -762,7 +764,7 @@ class Importer(requests.Session):
 
         try:
             key = db.Key.from_legacy_urlsafe(values[source_key])
-        except AttributeError:
+        except (AttributeError, TypeError):
             key = db.keyHelper(values[source_key], skel.kindName)
 
         key = db.Key(skel.kindName, key.id_or_name)
