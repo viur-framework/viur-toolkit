@@ -80,6 +80,12 @@ def set_status(
 
     If the function does not raise an Exception, all went well.
     It returns either the assigned skel, or the db.Entity on success.
+
+    The read-check-write cycle always runs inside a datastore transaction:
+    if a transaction is already open, it joins it; otherwise a new one is
+    opened (with up to *retry* attempts on :exc:`db.ViurDatastoreError`).
+    This makes the precondition check and the write atomic -- concurrent
+    modifications of the same entity cannot be lost or interleaved.
     """
     if key is None and skel is None:
         raise ValueError("No Key is provided")
@@ -160,7 +166,7 @@ def set_status(
         return obj
 
     # In case of already in transaction, just call the function.
-    if db.IsInTransaction:
+    if db.IsInTransaction():
         return transaction()
 
     # Otherwise, run the retry loop
