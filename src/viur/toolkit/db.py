@@ -4,6 +4,14 @@ import typing as t
 
 from viur.core import bones, db, skeleton
 
+# `db.ViurDatastoreError` is provided by the standalone `viur-datastore` package,
+# which viur-core re-exported until 3.7. Since 3.8 the datastore is part of
+# viur-core, the class is gone, and `db.RunInTransaction` retries conflicts on its
+# own before giving up. Resolve the name once here -- looking it up in the `except`
+# clause would raise an AttributeError *while* handling the original error and thus
+# mask it.
+_RETRYABLE_TRANSACTION_ERROR: type[BaseException] | None = getattr(db, "ViurDatastoreError", None)
+
 __all__ = [
     "normalize_key",
     "write_in_transaction",
@@ -76,14 +84,16 @@ def set_status(
     :param create: When key does not exist, create it, optionally with values from provided dict, or in a callable.
     :param skel: Use assigned skeleton instead of low-level DB-API
     :param update_relations: Trigger update relations task on success (only in skel-mode, defaults to False)
-    :param retry: On ViurDatastoreError, retry for this amount of times.
+    :param retry: On :exc:`db.ViurDatastoreError`, retry for this amount of times.
+        Has no effect with viur-core >= 3.8, which retries conflicts itself.
 
     If the function does not raise an Exception, all went well.
     It returns either the assigned skel, or the db.Entity on success.
 
     The read-check-write cycle always runs inside a datastore transaction:
     if a transaction is already open, it joins it; otherwise a new one is
-    opened (with up to *retry* attempts on :exc:`db.ViurDatastoreError`).
+    opened (with up to *retry* attempts on :exc:`db.ViurDatastoreError`
+    for viur-core < 3.8; newer versions handle the retries themselves).
     This makes the precondition check and the write atomic -- concurrent
     modifications of the same entity cannot be lost or interleaved.
     """
@@ -169,12 +179,17 @@ def set_status(
     if db.IsInTransaction():
         return transaction()
 
+    # viur-core >= 3.8 already retries conflicting transactions internally;
+    # there is no dedicated exception left to retry on here.
+    if _RETRYABLE_TRANSACTION_ERROR is None:
+        return db.RunInTransaction(transaction)
+
     # Otherwise, run the retry loop
     while True:
         try:
             return db.RunInTransaction(transaction)
 
-        except db.ViurDatastoreError as e:
+        except _RETRYABLE_TRANSACTION_ERROR as e:
             retry -= 1
             if retry <= 0:
                 raise
